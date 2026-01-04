@@ -128,7 +128,7 @@ def load_stock_data(market_type="ALL", page_size=10):
         df['소속구분'] = df['소속구분'].astype(str).replace({'0': 'KOSPI', '1': 'KOSDAQ'})
         df['등락구분'] = df['등락구분'].astype(str).replace({'2': '상승', '5': '하락', '3': '보합'})
 
-        # 3. 불필요 컬럼 제거 (수정됨: '등락구분'은 스타일링에 필요하므로 여기서 삭제하지 않음)
+        # 3. 불필요 컬럼 제거
         exclude_columns = [
             "매출액증가율", "영업이익", "영업이익증가율", "당기순이익", "상장일",
             "연속상한가일수", "연속하한가일수", "연속상하한가일수", "누적상한가일수", "누적하한가일수",
@@ -138,18 +138,15 @@ def load_stock_data(market_type="ALL", page_size=10):
             "발행사명", "실시간추정순자산가치(iNAV)",
             "소속구분", "종목타입", "시장경보구분", "장운영상태", "상장주식수", 
             "거래량변동", "거래량변동률", "전일거래량", "외국인보유수량"
-            # "등락구분" <--- 여기서 삭제하면 안 됩니다! (주석 처리 또는 제거)
+            # "등락구분"은 스타일링 계산을 위해 여기서 삭제하지 않습니다.
         ]
 
         cols_to_drop = []
         for col in df.columns:
-            # (1) 기존 관리/정지/상태태그 포함 컬럼
             if any(k in col for k in ['관리', '정지', '상태태그']):
                 cols_to_drop.append(col)
-            # (2) "ETF" 가 포함된 모든 컬럼
             elif 'ETF' in col:
                 cols_to_drop.append(col)
-            # (3) 구체적으로 명시된 제외 컬럼
             elif col in exclude_columns:
                 cols_to_drop.append(col)
 
@@ -209,7 +206,6 @@ def load_stock_data(market_type="ALL", page_size=10):
             '순위', '종목명', '종목코드', '시가총액(억원)', '현재가(원)', '등락률',
             'PER', '배당수익률', 'ROE', 'PBR', 'ROA'
         ]
-        # 우선순위 컬럼 중 남아있는 것만 선택
         existing_priority = [c for c in priority_cols if c in df.columns]
         other_cols = [c for c in df.columns if c not in existing_priority]
         df = df[existing_priority + other_cols]
@@ -222,7 +218,7 @@ def load_stock_data(market_type="ALL", page_size=10):
 
 # 5. 스타일링 함수
 def style_dataframe(row):
-    status = row.get('등락구분', '') # 등락구분이 있어야 색상을 결정할 수 있음
+    status = row.get('등락구분', '')
     
     if status == '상승':
         bg_color = '#FFF0F0'
@@ -336,13 +332,11 @@ def main():
         
         available_format_cols = [c for c in format_dict.keys() if c in df_kr.columns]
         
-        # 스타일 적용 및 컬럼 숨김 처리
+        # 스타일 적용 (여기서는 .hide를 쓰지 않음)
         styled_df = (
             df_kr.style
             .apply(style_dataframe, axis=1) 
             .format(format_dict, subset=available_format_cols)
-            # [중요] 등락구분 컬럼을 화면에서 숨깁니다. (스타일링 계산은 완료된 후)
-            .hide(axis="columns", subset=["등락구분"])
         )
 
         row_height = 35
@@ -355,11 +349,15 @@ def main():
         if final_height < 100:
             final_height = 100
 
+        # column_config를 사용하여 "등락구분" 컬럼을 화면에서 숨김 처리
         st.dataframe(
             styled_df, 
             width='stretch', 
             hide_index=True,
-            height=final_height
+            height=final_height,
+            column_config={
+                "등락구분": None
+            }
         )
         
         cnt = len(df_kr)
