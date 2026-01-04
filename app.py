@@ -1,6 +1,8 @@
 import streamlit as st
 import requests
 import pandas as pd
+import datetime
+import extra_streamlit_components as stx
 
 # 1. 페이지 설정
 st.set_page_config(
@@ -203,25 +205,65 @@ def style_dataframe(row):
         
     return styles
 
-# 6. 메인 함수
+# 6. 메인 함수 (수정됨)
 def main():
     st.title("KOREA STOCK MARKET SUM")
 
+    # [추가] 쿠키 매니저 초기화
+    cookie_manager = stx.CookieManager()
+
     market_options = {"전체": "ALL", "코스피": "KOSPI", "코스닥": "KOSDAQ"}
+    market_keys_list = list(market_options.keys()) # 인덱스 찾기용 리스트
     size_options = [10, 50, 100]
+
+    # [추가] 쿠키에서 저장된 설정 불러오기 (없으면 None 반환)
+    # 주의: 쿠키 매니저는 로드되는 데 약간의 시간이 걸릴 수 있어 초기값 처리가 필요합니다.
+    saved_market_pref = cookie_manager.get(cookie="market_pref")
+    saved_size_pref = cookie_manager.get(cookie="size_pref")
+
+    # [추가] 저장된 값이 있다면 해당 옵션의 인덱스(순서)를 찾음 (기본값: 0)
+    default_market_index = 0
+    if saved_market_pref in market_keys_list:
+        default_market_index = market_keys_list.index(saved_market_pref)
     
+    default_size_index = 0
+    # 쿠키는 문자열로 저장될 수 있으므로 형변환 주의
+    if saved_size_pref is not None and int(saved_size_pref) in size_options:
+        default_size_index = size_options.index(int(saved_size_pref))
+
     col1, col2, col3 = st.columns([1, 1, 2])
     
     with col1:
-        selected_label = st.selectbox("시장 선택", options=list(market_options.keys()))
-    
+        # index 파라미터에 위에서 계산한 default_index를 넣어줌
+        selected_label = st.selectbox(
+            "시장 선택", 
+            options=market_keys_list, 
+            index=default_market_index,
+            key="market_sb" # 키 지정 권장
+        )
+        
+        # [추가] 값이 변경되면 쿠키에 저장 (만료기간: 30일)
+        if saved_market_pref != selected_label:
+            cookie_manager.set("market_pref", selected_label, expires_at=datetime.datetime.now() + datetime.timedelta(days=30))
+
     with col2:
-        selected_size = st.selectbox("조회 개수 (Top N)", options=size_options, index=0)
+        selected_size = st.selectbox(
+            "조회 개수 (Top N)", 
+            options=size_options, 
+            index=default_size_index,
+            key="size_sb"
+        )
+
+        # [추가] 값이 변경되면 쿠키에 저장
+        # saved_size_pref가 None이거나 문자열일 수 있어 int 변환 비교
+        current_saved_size = int(saved_size_pref) if saved_size_pref is not None else None
+        if current_saved_size != selected_size:
+            cookie_manager.set("size_pref", selected_size, expires_at=datetime.datetime.now() + datetime.timedelta(days=30))
 
     with col3:
         search_term = st.text_input("종목명 검색", placeholder="종목명을 입력하세요 (예: 삼성)")
     
-    # 데이터 로드
+    # --- 이하 데이터 로드 및 출력 로직은 기존과 동일 ---
     selected_code = market_options[selected_label]
     df_kr = load_stock_data(selected_code, selected_size)
     
@@ -250,22 +292,13 @@ def main():
             .format(format_dict, subset=available_format_cols)
         )
 
-        # [수정됨] 높이 계산 로직 개선 (Sticky Header를 위한 Max Height 설정)
         row_height = 35
         header_height = 40
         buffer = 3
         
-        # 데이터 개수에 따른 높이 계산
         calculated_height = (len(df_kr) * row_height) + header_height + buffer
-        
-        # 최대 높이 설정 (약 20줄 정도 보여주고 스크롤 생성)
-        # 이 높이를 넘어가면 내부에 스크롤바가 생기고 헤더가 고정됩니다.
         MAX_TABLE_HEIGHT = 750 
-        
-        # 계산된 높이와 최대 높이 중 작은 값을 선택
         final_height = min(calculated_height, MAX_TABLE_HEIGHT)
-        
-        # 최소 높이 보정
         if final_height < 100:
             final_height = 100
 
