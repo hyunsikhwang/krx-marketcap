@@ -128,33 +128,39 @@ def load_stock_data(market_type="ALL", page_size=10):
         df['소속구분'] = df['소속구분'].astype(str).replace({'0': 'KOSPI', '1': 'KOSDAQ'})
         df['등락구분'] = df['등락구분'].astype(str).replace({'2': '상승', '5': '하락', '3': '보합'})
 
-        # 3. 불필요 컬럼 제거
-        cols_to_drop = [col for col in df.columns if '관리' in col or '정지' in col or '상태태그' in col]
+        # 3. 불필요 컬럼 제거 (요청 사항 반영)
+        # 제거 대상 컬럼 목록 정의
+        exclude_columns = [
+            "매출액증가율", "영업이익", "영업이익증가율", "당기순이익", "상장일",
+            "연속상한가일수", "연속하한가일수", "연속상하한가일수", "누적상한가일수", "누적하한가일수",
+            "유보율", "종목정보", "참조지수레버리지타입",
+            "1개월수익률", "3개월수익률", "6개월수익률", "1년수익률",
+            "순자산가치(NAV)", "괴리율부호", "괴리율", "순자산총액", "총보수",
+            "발행사명", "실시간추정순자산가치(iNAV)"
+        ]
+
+        cols_to_drop = []
+        for col in df.columns:
+            # (1) 기존 관리/정지/상태태그 포함 컬럼
+            if any(k in col for k in ['관리', '정지', '상태태그']):
+                cols_to_drop.append(col)
+            # (2) "ETF" 가 포함된 모든 컬럼
+            elif 'ETF' in col:
+                cols_to_drop.append(col)
+            # (3) 구체적으로 명시된 제외 컬럼
+            elif col in exclude_columns:
+                cols_to_drop.append(col)
+
         df = df.drop(columns=cols_to_drop, errors='ignore')
 
         # 4. 숫자형 변환
-        numeric_cols = ['시가총액',
-                        '현재가',
-                        '등락률',
-                        '주가수익비율(PER)',
-                        '배당수익률',
-                        '자기자본이익률(ROE)',
-                        '주가순자산비율(PBR)',
-                        '총자산이익률(ROA)',
-                        "상한가",
-                        "하한가",
-                        "거래량",
-                        "시가",
-                        "고가",
-                        "저가",
-                        "매수호가",
-                        "매수잔량",
-                        "매도호가",
-                        "매도잔량",
-                        "전일비",
-                        "거래대금",
-                        "외국인비율"]
+        numeric_cols = ['시가총액', '현재가', '등락률', '주가수익비율(PER)', '배당수익률', 
+                        '자기자본이익률(ROE)', '주가순자산비율(PBR)', '총자산이익률(ROA)', 
+                        "상한가", "하한가", "거래량", "시가", "고가", "저가", 
+                        "매수호가", "매수잔량", "매도호가", "매도잔량", 
+                        "전일비", "거래대금", "외국인비율"]
 
+        # 남은 컬럼 중에서 숫자형 변환 수행
         for col in numeric_cols:
             if col in df.columns:
                  df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -162,10 +168,11 @@ def load_stock_data(market_type="ALL", page_size=10):
         # 5. 시가총액 단위 변환
         if '시가총액' in df.columns:
             df['시가총액'] = df['시가총액'] / 100000000
+        if '거래대금' in df.columns:
             df['거래대금'] = df['거래대금'] / 100000000
 
         # 6. 컬럼명 변경
-        df = df.rename(columns={
+        rename_map = {
             '시가총액': '시가총액(억원)',
             '현재가': '현재가(원)',
             '주가수익비율(PER)': 'PER',
@@ -173,7 +180,9 @@ def load_stock_data(market_type="ALL", page_size=10):
             '자기자본이익률(ROE)': 'ROE',
             '총자산이익률(ROA)': 'ROA',
             '거래대금': '거래대금(억원)'
-        })
+        }
+        # 실제로 존재하는 컬럼만 변경
+        df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
 
         # 7. 현재가 화살표 표시
         def format_price_with_arrow(row):
@@ -193,6 +202,7 @@ def load_stock_data(market_type="ALL", page_size=10):
             '순위', '종목명', '종목코드', '시가총액(억원)', '현재가(원)', '등락률',
             'PER', '배당수익률', 'ROE', 'PBR', 'ROA'
         ]
+        # 우선순위 컬럼 중 남아있는 것만 선택
         existing_priority = [c for c in priority_cols if c in df.columns]
         other_cols = [c for c in df.columns if c not in existing_priority]
         df = df[existing_priority + other_cols]
@@ -228,7 +238,7 @@ def style_dataframe(row):
         
     return styles
 
-# 6. 메인 함수 (로직 전체 수정)
+# 6. 메인 함수
 def main():
     st.title("KOREA STOCK MARKET SUM")
 
@@ -239,25 +249,22 @@ def main():
     saved_market = cookie_manager.get("market_pref")
     saved_size = cookie_manager.get("size_pref")
 
-    # 3. [핵심] 쿠키가 로드되면 세션 상태(화면)에 강제로 한 번 반영하는 로직
-    #    'initialized' 플래그를 사용하여 접속 후 딱 한 번만 실행합니다.
+    # 3. 초기화 로직
     if saved_market is not None and "initialized" not in st.session_state:
-        st.session_state["market_sb"] = saved_market  # 시장 선택 복구
+        st.session_state["market_sb"] = saved_market
         if saved_size is not None:
-            st.session_state["size_sb"] = int(saved_size) # 조회 개수 복구
-        st.session_state["initialized"] = True # 초기화 완료 표시
-        st.rerun() # 화면 새로고침하여 반영
+            st.session_state["size_sb"] = int(saved_size)
+        st.session_state["initialized"] = True
+        st.rerun()
 
-    # 4. 값이 바뀔 때 실행될 저장 함수 (Callback)
+    # 4. 저장 함수
     def save_settings():
-        # 시장 선택 저장
         cookie_manager.set(
             "market_pref", 
             st.session_state["market_sb"], 
             expires_at=datetime.datetime.now() + datetime.timedelta(days=30),
             key="set_market"
         )
-        # 조회 개수 저장
         cookie_manager.set(
             "size_pref", 
             st.session_state["size_sb"], 
@@ -271,11 +278,10 @@ def main():
     col1, col2, col3 = st.columns([1, 1, 2])
     
     with col1:
-        # on_change=save_settings를 추가하여 사용자가 바꿀 때만 저장되도록 함
         selected_label = st.selectbox(
             "시장 선택", 
             options=list(market_options.keys()), 
-            key="market_sb",  # 세션 스테이트 키
+            key="market_sb",
             on_change=save_settings 
         )
     
@@ -283,14 +289,14 @@ def main():
         selected_size = st.selectbox(
             "조회 개수 (Top N)", 
             options=size_options, 
-            key="size_sb",  # 세션 스테이트 키
+            key="size_sb",
             on_change=save_settings
         )
 
     with col3:
         search_term = st.text_input("종목명 검색", placeholder="종목명을 입력하세요 (예: 삼성)")
 
-    # --- 이하 데이터 로드 및 출력 로직은 기존과 동일 ---
+    # 데이터 로드 및 출력
     selected_code = market_options[selected_label]
     df_kr = load_stock_data(selected_code, selected_size)
     
@@ -319,7 +325,7 @@ def main():
             "매도호가": "{:,.0f}",
             "매도잔량": "{:,.0f}",
             "전일비": "{:,.0f}",
-            "거래대금": "{:,.0f}",
+            "거래대금(억원)": "{:,.0f}",
             "외국인비율": "{:,.1f}%"
         }
         
