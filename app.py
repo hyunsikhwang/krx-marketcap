@@ -304,7 +304,7 @@ def main():
 
         st.dataframe(
             styled_df, 
-            use_container_width=True, 
+            width='stretch', 
             hide_index=True,
             height=final_height
         )
