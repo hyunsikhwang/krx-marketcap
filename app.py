@@ -133,7 +133,28 @@ def load_stock_data(market_type="ALL", page_size=10):
         df = df.drop(columns=cols_to_drop, errors='ignore')
 
         # 4. 숫자형 변환
-        numeric_cols = ['시가총액', '현재가', '등락률', '주가수익비율(PER)', '배당수익률', '자기자본이익률(ROE)', '주가순자산비율(PBR)', '총자산이익률(ROA)']
+        numeric_cols = ['시가총액',
+                        '현재가',
+                        '등락률',
+                        '주가수익비율(PER)',
+                        '배당수익률',
+                        '자기자본이익률(ROE)',
+                        '주가순자산비율(PBR)',
+                        '총자산이익률(ROA)',
+                        "상한가",
+                        "하한가",
+                        "거래량",
+                        "시가",
+                        "고가",
+                        "저가",
+                        "매수호가",
+                        "매수잔량",
+                        "매도호가",
+                        "매도잔량",
+                        "전일비",
+                        "거래대금",
+                        "외국인비율"]
+
         for col in numeric_cols:
             if col in df.columns:
                  df[col] = pd.to_numeric(df[col], errors='coerce')
