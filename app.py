@@ -42,6 +42,11 @@ st.markdown("""
             padding-bottom: 15px;
             margin-bottom: 30px;
         }
+        
+        /* 셀렉트박스 스타일 */
+        div[data-baseweb="select"] {
+            font-family: 'Helvetica Neue', sans-serif;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -77,13 +82,14 @@ KEY_MAP = {
     "issuerNameKo": "발행사명", "inav": "실시간추정순자산가치(iNAV)"
 }
 
-# 4. 데이터 로드 및 전처리 함수
+# 4. 데이터 로드 및 전처리 함수 (market_type, page_size 파라미터 추가)
 @st.cache_data(ttl=60)
-def load_stock_data():
+def load_stock_data(market_type="ALL", page_size=10):
+    # f-string을 사용하여 선택된 market_type과 page_size를 URL에 삽입
     url = (
         "https://stock.naver.com/api/domestic/market/stock/default"
-        "?tradeType=KRX&marketType=ALL&orderType=marketSum"
-        "&startIdx=0&pageSize=100"
+        f"?tradeType=KRX&marketType={market_type}&orderType=marketSum"
+        f"&startIdx=0&pageSize={page_size}"
     )
     
     headers = {
@@ -158,7 +164,7 @@ def load_stock_data():
         if '현재가(원)' in df.columns:
             df['현재가(원)'] = df.apply(format_price_with_arrow, axis=1)
 
-        # 8. 컬럼 순서 재배치 (등락률을 현재가 뒤로)
+        # 8. 컬럼 순서 재배치
         priority_cols = [
             '종목명', '종목코드', '시가총액(억원)', '현재가(원)', '등락률',
             'PER', '배당수익률', 'ROE', 'PBR', 'ROA'
@@ -173,33 +179,27 @@ def load_stock_data():
         st.error(f"데이터 처리 중 오류 발생: {e}")
         return pd.DataFrame()
 
-# 5. 스타일링 함수 (배경색 + 폰트색 동시 처리)
+# 5. 스타일링 함수
 def style_dataframe(row):
     status = row.get('등락구분', '')
     
-    # 1. 배경색 설정 (파스텔 톤)
     if status == '상승':
-        bg_color = '#FFF0F0' # 연한 빨강
+        bg_color = '#FFF0F0'
         font_color = 'red'
     elif status == '하락':
-        bg_color = '#F0F8FF' # 연한 파랑
+        bg_color = '#F0F8FF'
         font_color = 'blue'
     else:
         bg_color = '#FFFFFF'
         font_color = 'black'
     
-    # 각 컬럼별 스타일 생성
     styles = []
     for col in row.index:
-        # 기본 배경색 스타일
         style = f'background-color: {bg_color};'
-        
-        # 특정 컬럼(현재가, 등락률)에만 폰트 색상 적용
         if col in ['현재가(원)', '등락률']:
             style += f' color: {font_color}; font-weight: bold;'
         else:
-            style += ' color: black;' # 나머지는 검은색 글씨
-            
+            style += ' color: black;'
         styles.append(style)
         
     return styles
@@ -207,14 +207,44 @@ def style_dataframe(row):
 # 6. 메인 함수
 def main():
     st.title("KOREA STOCK MARKET SUM")
+
+    # 시장 선택 옵션
+    market_options = {
+        "전체": "ALL",
+        "코스피": "KOSPI",
+        "코스닥": "KOSDAQ"
+    }
+
+    # 조회 개수 옵션
+    size_options = [10, 50, 100]
     
-    df_kr = load_stock_data()
+    # 레이아웃 배치 (1:1:3 비율)
+    col1, col2, col3 = st.columns([1, 1, 3])
+    
+    with col1:
+        selected_label = st.selectbox(
+            "시장 선택",
+            options=list(market_options.keys())
+        )
+    
+    with col2:
+        selected_size = st.selectbox(
+            "조회 개수 (Top N)",
+            options=size_options,
+            index=0  # 기본값 10 (리스트의 0번째 인덱스)
+        )
+    
+    # 선택된 값 적용
+    selected_code = market_options[selected_label]
+    
+    # 데이터 로드 (시장 코드, 조회 개수 전달)
+    df_kr = load_stock_data(selected_code, selected_size)
     
     if not df_kr.empty:
-        # Pandas Styler 적용
+        # 포맷팅 설정
         format_dict = {
             "시가총액(억원)": "{:,.0f}",
-            "등락률": "{:+.2f}%",  # 부호 붙여서 표시
+            "등락률": "{:+.2f}%",
             "PER": "{:,.1f}",
             "PBR": "{:,.1f}",
             "배당수익률": "{:,.1f}",
@@ -224,7 +254,7 @@ def main():
         
         available_format_cols = [c for c in format_dict.keys() if c in df_kr.columns]
         
-        # 스타일 함수 적용 (axis=1은 행 단위로 처리)
+        # 스타일 적용
         styled_df = (
             df_kr.style
             .apply(style_dataframe, axis=1) 
