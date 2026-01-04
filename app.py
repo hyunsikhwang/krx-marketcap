@@ -233,7 +233,7 @@ def main():
 
     col1, col2, col3 = st.columns([1, 1, 2])
     
-with col1:
+    with col1:
         # index 파라미터에 위에서 계산한 default_index를 넣어줌
         selected_label = st.selectbox(
             "시장 선택", 
