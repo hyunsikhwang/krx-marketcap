@@ -205,79 +205,68 @@ def style_dataframe(row):
         
     return styles
 
-# 6. 메인 함수 (수정됨)
+# 6. 메인 함수 (로직 전체 수정)
 def main():
     st.title("KOREA STOCK MARKET SUM")
 
-    # [추가] 쿠키 매니저 초기화
+    # 1. 쿠키 매니저 초기화
     cookie_manager = stx.CookieManager()
+    
+    # 2. 쿠키 값 가져오기
+    saved_market = cookie_manager.get("market_pref")
+    saved_size = cookie_manager.get("size_pref")
+
+    # 3. [핵심] 쿠키가 로드되면 세션 상태(화면)에 강제로 한 번 반영하는 로직
+    #    'initialized' 플래그를 사용하여 접속 후 딱 한 번만 실행합니다.
+    if saved_market is not None and "initialized" not in st.session_state:
+        st.session_state["market_sb"] = saved_market  # 시장 선택 복구
+        if saved_size is not None:
+            st.session_state["size_sb"] = int(saved_size) # 조회 개수 복구
+        st.session_state["initialized"] = True # 초기화 완료 표시
+        st.rerun() # 화면 새로고침하여 반영
+
+    # 4. 값이 바뀔 때 실행될 저장 함수 (Callback)
+    def save_settings():
+        # 시장 선택 저장
+        cookie_manager.set(
+            "market_pref", 
+            st.session_state["market_sb"], 
+            expires_at=datetime.datetime.now() + datetime.timedelta(days=30),
+            key="set_market"
+        )
+        # 조회 개수 저장
+        cookie_manager.set(
+            "size_pref", 
+            st.session_state["size_sb"], 
+            expires_at=datetime.datetime.now() + datetime.timedelta(days=30),
+            key="set_size"
+        )
 
     market_options = {"전체": "ALL", "코스피": "KOSPI", "코스닥": "KOSDAQ"}
-    market_keys_list = list(market_options.keys()) # 인덱스 찾기용 리스트
     size_options = [10, 50, 100]
-
-    # [추가] 쿠키에서 저장된 설정 불러오기 (없으면 None 반환)
-    # 주의: 쿠키 매니저는 로드되는 데 약간의 시간이 걸릴 수 있어 초기값 처리가 필요합니다.
-    saved_market_pref = cookie_manager.get(cookie="market_pref")
-    saved_size_pref = cookie_manager.get(cookie="size_pref")
-
-    # [추가] 저장된 값이 있다면 해당 옵션의 인덱스(순서)를 찾음 (기본값: 0)
-    default_market_index = 0
-    if saved_market_pref in market_keys_list:
-        default_market_index = market_keys_list.index(saved_market_pref)
     
-    default_size_index = 0
-    # 쿠키는 문자열로 저장될 수 있으므로 형변환 주의
-    if saved_size_pref is not None and int(saved_size_pref) in size_options:
-        default_size_index = size_options.index(int(saved_size_pref))
-
     col1, col2, col3 = st.columns([1, 1, 2])
     
     with col1:
-        # index 파라미터에 위에서 계산한 default_index를 넣어줌
+        # on_change=save_settings를 추가하여 사용자가 바꿀 때만 저장되도록 함
         selected_label = st.selectbox(
             "시장 선택", 
-            options=market_keys_list, 
-            index=default_market_index,
-            key="market_sb"
+            options=list(market_options.keys()), 
+            key="market_sb",  # 세션 스테이트 키
+            on_change=save_settings 
         )
-        
-        # [수정] key="set_market" 추가하여 고유값 부여
-        if saved_market_pref != selected_label:
-            cookie_manager.set(
-                "market_pref", 
-                selected_label, 
-                expires_at=datetime.datetime.now() + datetime.timedelta(days=30),
-                key="set_market"  # <--- 이 부분 추가
-            )
-
+    
     with col2:
         selected_size = st.selectbox(
             "조회 개수 (Top N)", 
             options=size_options, 
-            index=default_size_index,
-            key="size_sb"
+            key="size_sb",  # 세션 스테이트 키
+            on_change=save_settings
         )
-
-        # [수정] key="set_size" 추가하여 고유값 부여
-        current_saved_size = int(saved_size_pref) if saved_size_pref is not None else None
-        if current_saved_size != selected_size:
-            cookie_manager.set(
-                "size_pref", 
-                selected_size, 
-                expires_at=datetime.datetime.now() + datetime.timedelta(days=30),
-                key="set_size"  # <--- 이 부분 추가
-            )
-
-        # [추가] 값이 변경되면 쿠키에 저장
-        # saved_size_pref가 None이거나 문자열일 수 있어 int 변환 비교
-        current_saved_size = int(saved_size_pref) if saved_size_pref is not None else None
-        if current_saved_size != selected_size:
-            cookie_manager.set("size_pref", selected_size, expires_at=datetime.datetime.now() + datetime.timedelta(days=30))
 
     with col3:
         search_term = st.text_input("종목명 검색", placeholder="종목명을 입력하세요 (예: 삼성)")
-    
+
     # --- 이하 데이터 로드 및 출력 로직은 기존과 동일 ---
     selected_code = market_options[selected_label]
     df_kr = load_stock_data(selected_code, selected_size)
