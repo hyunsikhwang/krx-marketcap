@@ -233,18 +233,23 @@ def main():
 
     col1, col2, col3 = st.columns([1, 1, 2])
     
-    with col1:
+with col1:
         # index 파라미터에 위에서 계산한 default_index를 넣어줌
         selected_label = st.selectbox(
             "시장 선택", 
             options=market_keys_list, 
             index=default_market_index,
-            key="market_sb" # 키 지정 권장
+            key="market_sb"
         )
         
-        # [추가] 값이 변경되면 쿠키에 저장 (만료기간: 30일)
+        # [수정] key="set_market" 추가하여 고유값 부여
         if saved_market_pref != selected_label:
-            cookie_manager.set("market_pref", selected_label, expires_at=datetime.datetime.now() + datetime.timedelta(days=30))
+            cookie_manager.set(
+                "market_pref", 
+                selected_label, 
+                expires_at=datetime.datetime.now() + datetime.timedelta(days=30),
+                key="set_market"  # <--- 이 부분 추가
+            )
 
     with col2:
         selected_size = st.selectbox(
@@ -253,6 +258,16 @@ def main():
             index=default_size_index,
             key="size_sb"
         )
+
+        # [수정] key="set_size" 추가하여 고유값 부여
+        current_saved_size = int(saved_size_pref) if saved_size_pref is not None else None
+        if current_saved_size != selected_size:
+            cookie_manager.set(
+                "size_pref", 
+                selected_size, 
+                expires_at=datetime.datetime.now() + datetime.timedelta(days=30),
+                key="set_size"  # <--- 이 부분 추가
+            )
 
         # [추가] 값이 변경되면 쿠키에 저장
         # saved_size_pref가 None이거나 문자열일 수 있어 int 변환 비교
