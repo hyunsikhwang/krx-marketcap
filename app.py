@@ -128,8 +128,7 @@ def load_stock_data(market_type="ALL", page_size=10):
         df['소속구분'] = df['소속구분'].astype(str).replace({'0': 'KOSPI', '1': 'KOSDAQ'})
         df['등락구분'] = df['등락구분'].astype(str).replace({'2': '상승', '5': '하락', '3': '보합'})
 
-        # 3. 불필요 컬럼 제거 (요청 사항 반영)
-        # 제거 대상 컬럼 목록 정의
+        # 3. 불필요 컬럼 제거 (수정됨: '등락구분'은 스타일링에 필요하므로 여기서 삭제하지 않음)
         exclude_columns = [
             "매출액증가율", "영업이익", "영업이익증가율", "당기순이익", "상장일",
             "연속상한가일수", "연속하한가일수", "연속상하한가일수", "누적상한가일수", "누적하한가일수",
@@ -137,8 +136,9 @@ def load_stock_data(market_type="ALL", page_size=10):
             "1개월수익률", "3개월수익률", "6개월수익률", "1년수익률",
             "순자산가치(NAV)", "괴리율부호", "괴리율", "순자산총액", "총보수",
             "발행사명", "실시간추정순자산가치(iNAV)",
-            "소속구분", "등락구분", "종목타입", "시장경보구분", "장운영상태", "상장주식수", "상장일", "상장주식수",
+            "소속구분", "종목타입", "시장경보구분", "장운영상태", "상장주식수", 
             "거래량변동", "거래량변동률", "전일거래량", "외국인보유수량"
+            # "등락구분" <--- 여기서 삭제하면 안 됩니다! (주석 처리 또는 제거)
         ]
 
         cols_to_drop = []
@@ -163,12 +163,11 @@ def load_stock_data(market_type="ALL", page_size=10):
                         "전일비", "거래대금", "외국인비율", "외국인보유수량", "상장주식수",
                         "주당순이익", "52주최고가", "52주최저가"]
 
-        # 남은 컬럼 중에서 숫자형 변환 수행
         for col in numeric_cols:
             if col in df.columns:
                  df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # 5. 시가총액 단위 변환
+        # 5. 단위 변환
         if '시가총액' in df.columns:
             df['시가총액'] = df['시가총액'] / 100000000
         if '거래대금' in df.columns:
@@ -190,7 +189,6 @@ def load_stock_data(market_type="ALL", page_size=10):
             '외국인보유수량': '외국인보유수량(만주)',
             '상장주식수': '상장주식수(만주)'
         }
-        # 실제로 존재하는 컬럼만 변경
         df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
 
         # 7. 현재가 화살표 표시
@@ -224,7 +222,7 @@ def load_stock_data(market_type="ALL", page_size=10):
 
 # 5. 스타일링 함수
 def style_dataframe(row):
-    status = row.get('등락구분', '')
+    status = row.get('등락구분', '') # 등락구분이 있어야 색상을 결정할 수 있음
     
     if status == '상승':
         bg_color = '#FFF0F0'
@@ -251,14 +249,10 @@ def style_dataframe(row):
 def main():
     st.title("KOREA STOCK MARKET SUM")
 
-    # 1. 쿠키 매니저 초기화
     cookie_manager = stx.CookieManager()
-    
-    # 2. 쿠키 값 가져오기
     saved_market = cookie_manager.get("market_pref")
     saved_size = cookie_manager.get("size_pref")
 
-    # 3. 초기화 로직
     if saved_market is not None and "initialized" not in st.session_state:
         st.session_state["market_sb"] = saved_market
         if saved_size is not None:
@@ -266,7 +260,6 @@ def main():
         st.session_state["initialized"] = True
         st.rerun()
 
-    # 4. 저장 함수
     def save_settings():
         cookie_manager.set(
             "market_pref", 
@@ -310,11 +303,9 @@ def main():
     df_kr = load_stock_data(selected_code, selected_size)
     
     if not df_kr.empty:
-        # 검색 필터링
         if search_term:
             df_kr = df_kr[df_kr['종목명'].str.contains(search_term)]
 
-        # 포맷팅 설정
         format_dict = {
             "시가총액(억원)": "{:,.0f}",
             "등락률": "{:+.2f}%",
@@ -345,11 +336,13 @@ def main():
         
         available_format_cols = [c for c in format_dict.keys() if c in df_kr.columns]
         
-        # 스타일 적용
+        # 스타일 적용 및 컬럼 숨김 처리
         styled_df = (
             df_kr.style
             .apply(style_dataframe, axis=1) 
             .format(format_dict, subset=available_format_cols)
+            # [중요] 등락구분 컬럼을 화면에서 숨깁니다. (스타일링 계산은 완료된 후)
+            .hide(axis="columns", subset=["등락구분"])
         )
 
         row_height = 35
