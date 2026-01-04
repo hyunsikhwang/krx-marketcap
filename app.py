@@ -43,8 +43,8 @@ st.markdown("""
             margin-bottom: 30px;
         }
         
-        /* 셀렉트박스 스타일 */
-        div[data-baseweb="select"] {
+        /* 셀렉트박스 및 인풋 스타일 */
+        div[data-baseweb="select"], div[data-baseweb="input"] {
             font-family: 'Helvetica Neue', sans-serif;
         }
     </style>
@@ -116,22 +116,32 @@ def load_stock_data(market_type="ALL", page_size=10):
         if df.empty:
             return df
 
-        # 전처리 로직
+        # [NEW] 순위 컬럼 생성 (인덱스 + 1)
+        # 데이터를 가져온 직후가 시가총액 순서이므로 이때 순위를 매깁니다.
+        df['순위'] = df.index + 1
+
+        # 1. 컬럼명 한글 변환
         df = df.rename(columns=KEY_MAP)
+
+        # 2. 소속/등락 변환
         df['소속구분'] = df['소속구분'].astype(str).replace({'0': 'KOSPI', '1': 'KOSDAQ'})
         df['등락구분'] = df['등락구분'].astype(str).replace({'2': '상승', '5': '하락', '3': '보합'})
-        
+
+        # 3. 불필요 컬럼 제거
         cols_to_drop = [col for col in df.columns if '관리' in col or '정지' in col or '상태태그' in col]
         df = df.drop(columns=cols_to_drop, errors='ignore')
 
+        # 4. 숫자형 변환
         numeric_cols = ['시가총액', '현재가', '등락률', '주가수익비율(PER)', '배당수익률', '자기자본이익률(ROE)', '주가순자산비율(PBR)', '총자산이익률(ROA)']
         for col in numeric_cols:
             if col in df.columns:
                  df[col] = pd.to_numeric(df[col], errors='coerce')
 
+        # 5. 시가총액 단위 변환
         if '시가총액' in df.columns:
             df['시가총액'] = df['시가총액'] / 100000000
 
+        # 6. 컬럼명 변경
         df = df.rename(columns={
             '시가총액': '시가총액(억원)',
             '현재가': '현재가(원)',
@@ -141,6 +151,7 @@ def load_stock_data(market_type="ALL", page_size=10):
             '총자산이익률(ROA)': 'ROA'
         })
 
+        # 7. 현재가 화살표 표시
         def format_price_with_arrow(row):
             price = row.get('현재가(원)', 0)
             status = row.get('등락구분', '')
@@ -153,8 +164,9 @@ def load_stock_data(market_type="ALL", page_size=10):
         if '현재가(원)' in df.columns:
             df['현재가(원)'] = df.apply(format_price_with_arrow, axis=1)
 
+        # 8. 컬럼 순서 재배치 ('순위'를 가장 앞으로)
         priority_cols = [
-            '종목명', '종목코드', '시가총액(억원)', '현재가(원)', '등락률',
+            '순위', '종목명', '종목코드', '시가총액(억원)', '현재가(원)', '등락률',
             'PER', '배당수익률', 'ROE', 'PBR', 'ROA'
         ]
         existing_priority = [c for c in priority_cols if c in df.columns]
@@ -199,18 +211,31 @@ def main():
     market_options = {"전체": "ALL", "코스피": "KOSPI", "코스닥": "KOSDAQ"}
     size_options = [10, 50, 100]
     
-    col1, col2, col3 = st.columns([1, 1, 3])
+    # 레이아웃 배치 (시장선택 / 조회개수 / 검색창)
+    # 검색창 공간을 위해 비율을 1:1:2 정도로 할당
+    col1, col2, col3 = st.columns([1, 1, 2])
     
     with col1:
         selected_label = st.selectbox("시장 선택", options=list(market_options.keys()))
     
     with col2:
         selected_size = st.selectbox("조회 개수 (Top N)", options=size_options, index=0)
+
+    with col3:
+        # [NEW] 검색 기능
+        search_term = st.text_input("종목명 검색", placeholder="종목명을 입력하세요 (예: 삼성)")
     
+    # 데이터 로드
     selected_code = market_options[selected_label]
     df_kr = load_stock_data(selected_code, selected_size)
     
     if not df_kr.empty:
+        # [NEW] 검색 필터링 로직
+        if search_term:
+            # '종목명'에 검색어가 포함된 행만 필터링
+            df_kr = df_kr[df_kr['종목명'].str.contains(search_term)]
+
+        # 포맷팅 설정
         format_dict = {
             "시가총액(억원)": "{:,.0f}",
             "등락률": "{:+.2f}%",
@@ -223,32 +248,36 @@ def main():
         
         available_format_cols = [c for c in format_dict.keys() if c in df_kr.columns]
         
+        # 스타일 적용
         styled_df = (
             df_kr.style
             .apply(style_dataframe, axis=1) 
             .format(format_dict, subset=available_format_cols)
         )
 
-        # 동적 높이 계산 (헤더 약 40px + 행당 약 35px + 여유분)
-        # 10개일 때: 350 + 40 = 390px 근처
+        # 동적 높이 계산
         row_height = 35
         header_height = 40
-        buffer = 3  # 스크롤바 방지용 미세 조정
+        buffer = 3
         
-        # 데이터 개수에 따른 높이 계산
+        # 필터링된 데이터 개수(len(df_kr)) 기준으로 높이 계산
         dynamic_height = (len(df_kr) * row_height) + header_height + buffer
+
+        # 최소 높이 설정 (데이터가 없을 때 너무 납작해지지 않도록)
+        if dynamic_height < 100:
+            dynamic_height = 100
 
         st.dataframe(
             styled_df, 
             use_container_width=True, 
             hide_index=True,
-            height=dynamic_height # 계산된 높이 적용
+            height=dynamic_height
         )
         
         cnt = len(df_kr)
         st.markdown(f"""
         <div style="text-align: right; color: #888; font-size: 0.8em; margin-top: 10px;">
-            Total Items: {cnt} | Source: Naver Finance
+            Items displayed: {cnt} | Source: Naver Finance
         </div>
         """, unsafe_allow_html=True)
     else:
