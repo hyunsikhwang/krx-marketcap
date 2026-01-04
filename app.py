@@ -82,10 +82,9 @@ KEY_MAP = {
     "issuerNameKo": "발행사명", "inav": "실시간추정순자산가치(iNAV)"
 }
 
-# 4. 데이터 로드 및 전처리 함수 (market_type, page_size 파라미터 추가)
+# 4. 데이터 로드 및 전처리 함수
 @st.cache_data(ttl=60)
 def load_stock_data(market_type="ALL", page_size=10):
-    # f-string을 사용하여 선택된 market_type과 page_size를 URL에 삽입
     url = (
         "https://stock.naver.com/api/domestic/market/stock/default"
         f"?tradeType=KRX&marketType={market_type}&orderType=marketSum"
@@ -117,28 +116,22 @@ def load_stock_data(market_type="ALL", page_size=10):
         if df.empty:
             return df
 
-        # 1. 컬럼명 한글 변환
+        # 전처리 로직
         df = df.rename(columns=KEY_MAP)
-
-        # 2. 소속/등락 변환
         df['소속구분'] = df['소속구분'].astype(str).replace({'0': 'KOSPI', '1': 'KOSDAQ'})
         df['등락구분'] = df['등락구분'].astype(str).replace({'2': '상승', '5': '하락', '3': '보합'})
-
-        # 3. 불필요 컬럼 제거
+        
         cols_to_drop = [col for col in df.columns if '관리' in col or '정지' in col or '상태태그' in col]
         df = df.drop(columns=cols_to_drop, errors='ignore')
 
-        # 4. 숫자형 변환 (에러 방지)
         numeric_cols = ['시가총액', '현재가', '등락률', '주가수익비율(PER)', '배당수익률', '자기자본이익률(ROE)', '주가순자산비율(PBR)', '총자산이익률(ROA)']
         for col in numeric_cols:
             if col in df.columns:
                  df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # 5. 시가총액 단위 변환 (원 -> 억원)
         if '시가총액' in df.columns:
             df['시가총액'] = df['시가총액'] / 100000000
 
-        # 6. 컬럼명 변경 (단위 추가)
         df = df.rename(columns={
             '시가총액': '시가총액(억원)',
             '현재가': '현재가(원)',
@@ -148,23 +141,18 @@ def load_stock_data(market_type="ALL", page_size=10):
             '총자산이익률(ROA)': 'ROA'
         })
 
-        # 7. 현재가 화살표 표시 (문자열로 변환됨)
         def format_price_with_arrow(row):
             price = row.get('현재가(원)', 0)
             status = row.get('등락구분', '')
-            
             if pd.isna(price): return "-"
-            
             symbol = "-"
             if status == '상승': symbol = "▲"
             elif status == '하락': symbol = "▼"
-            
             return f"{symbol} {int(price):,}"
 
         if '현재가(원)' in df.columns:
             df['현재가(원)'] = df.apply(format_price_with_arrow, axis=1)
 
-        # 8. 컬럼 순서 재배치
         priority_cols = [
             '종목명', '종목코드', '시가총액(억원)', '현재가(원)', '등락률',
             'PER', '배당수익률', 'ROE', 'PBR', 'ROA'
@@ -208,40 +196,21 @@ def style_dataframe(row):
 def main():
     st.title("KOREA STOCK MARKET SUM")
 
-    # 시장 선택 옵션
-    market_options = {
-        "전체": "ALL",
-        "코스피": "KOSPI",
-        "코스닥": "KOSDAQ"
-    }
-
-    # 조회 개수 옵션
+    market_options = {"전체": "ALL", "코스피": "KOSPI", "코스닥": "KOSDAQ"}
     size_options = [10, 50, 100]
     
-    # 레이아웃 배치 (1:1:3 비율)
     col1, col2, col3 = st.columns([1, 1, 3])
     
     with col1:
-        selected_label = st.selectbox(
-            "시장 선택",
-            options=list(market_options.keys())
-        )
+        selected_label = st.selectbox("시장 선택", options=list(market_options.keys()))
     
     with col2:
-        selected_size = st.selectbox(
-            "조회 개수 (Top N)",
-            options=size_options,
-            index=0  # 기본값 10 (리스트의 0번째 인덱스)
-        )
+        selected_size = st.selectbox("조회 개수 (Top N)", options=size_options, index=0)
     
-    # 선택된 값 적용
     selected_code = market_options[selected_label]
-    
-    # 데이터 로드 (시장 코드, 조회 개수 전달)
     df_kr = load_stock_data(selected_code, selected_size)
     
     if not df_kr.empty:
-        # 포맷팅 설정
         format_dict = {
             "시가총액(억원)": "{:,.0f}",
             "등락률": "{:+.2f}%",
@@ -254,18 +223,26 @@ def main():
         
         available_format_cols = [c for c in format_dict.keys() if c in df_kr.columns]
         
-        # 스타일 적용
         styled_df = (
             df_kr.style
             .apply(style_dataframe, axis=1) 
             .format(format_dict, subset=available_format_cols)
         )
 
+        # 동적 높이 계산 (헤더 약 40px + 행당 약 35px + 여유분)
+        # 10개일 때: 350 + 40 = 390px 근처
+        row_height = 35
+        header_height = 40
+        buffer = 3  # 스크롤바 방지용 미세 조정
+        
+        # 데이터 개수에 따른 높이 계산
+        dynamic_height = (len(df_kr) * row_height) + header_height + buffer
+
         st.dataframe(
             styled_df, 
             use_container_width=True, 
             hide_index=True,
-            height=800
+            height=dynamic_height # 계산된 높이 적용
         )
         
         cnt = len(df_kr)
