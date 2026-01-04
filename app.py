@@ -188,7 +188,7 @@ def load_stock_data(market_type="ALL", page_size=10):
             '총자산이익률(ROA)': 'ROA',
             '거래대금': '거래대금(억원)',
             '외국인보유수량': '외국인보유수량(만주)',
-            '상장주식수': '상장주식수(만주)
+            '상장주식수': '상장주식수(만주)'
         }
         # 실제로 존재하는 컬럼만 변경
         df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
