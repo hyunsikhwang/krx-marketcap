@@ -123,7 +123,7 @@ def load_stock_data():
         df = df.drop(columns=cols_to_drop, errors='ignore')
 
         # 4. 숫자형 변환 (에러 방지)
-        numeric_cols = ['시가총액', '현재가', '주가수익비율(PER)', '배당수익률', '자기자본이익률(ROE)', '주가순자산비율(PBR)', '총자산이익률(ROA)']
+        numeric_cols = ['시가총액', '현재가', '등락률', '주가수익비율(PER)', '배당수익률', '자기자본이익률(ROE)', '주가순자산비율(PBR)', '총자산이익률(ROA)']
         for col in numeric_cols:
             if col in df.columns:
                  df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -143,28 +143,24 @@ def load_stock_data():
         })
 
         # 7. 현재가 화살표 표시 (문자열로 변환됨)
-        #    참고: 숫자 정렬을 위해 원본을 남겨야 하지만, 화면 표시 우선으로 문자열 처리함.
         def format_price_with_arrow(row):
             price = row.get('현재가(원)', 0)
             status = row.get('등락구분', '')
             
-            # NaN 처리
             if pd.isna(price): return "-"
             
-            # 기호 결정
             symbol = "-"
             if status == '상승': symbol = "▲"
             elif status == '하락': symbol = "▼"
             
-            # 포맷팅 (기호 + 천단위 콤마)
             return f"{symbol} {int(price):,}"
 
         if '현재가(원)' in df.columns:
             df['현재가(원)'] = df.apply(format_price_with_arrow, axis=1)
 
-        # 8. 컬럼 순서 재배치
+        # 8. 컬럼 순서 재배치 (등락률을 현재가 뒤로)
         priority_cols = [
-            '종목명', '종목코드', '시가총액(억원)', '현재가(원)', 
+            '종목명', '종목코드', '시가총액(억원)', '현재가(원)', '등락률',
             'PER', '배당수익률', 'ROE', 'PBR', 'ROA'
         ]
         existing_priority = [c for c in priority_cols if c in df.columns]
@@ -177,19 +173,36 @@ def load_stock_data():
         st.error(f"데이터 처리 중 오류 발생: {e}")
         return pd.DataFrame()
 
-# 5. 행 배경색 스타일링 함수
-def highlight_rows(row):
+# 5. 스타일링 함수 (배경색 + 폰트색 동시 처리)
+def style_dataframe(row):
     status = row.get('등락구분', '')
     
-    # 가독성을 위해 아주 연한 파스텔톤 사용
+    # 1. 배경색 설정 (파스텔 톤)
     if status == '상승':
-        color = 'background-color: #FFF0F0; color: black;' # 연한 빨강
+        bg_color = '#FFF0F0' # 연한 빨강
+        font_color = 'red'
     elif status == '하락':
-        color = 'background-color: #F0F8FF; color: black;' # 연한 파랑 (AliceBlue)
+        bg_color = '#F0F8FF' # 연한 파랑
+        font_color = 'blue'
     else:
-        color = 'background-color: #FFFFFF; color: black;' # 흰색
+        bg_color = '#FFFFFF'
+        font_color = 'black'
+    
+    # 각 컬럼별 스타일 생성
+    styles = []
+    for col in row.index:
+        # 기본 배경색 스타일
+        style = f'background-color: {bg_color};'
         
-    return [color] * len(row)
+        # 특정 컬럼(현재가, 등락률)에만 폰트 색상 적용
+        if col in ['현재가(원)', '등락률']:
+            style += f' color: {font_color}; font-weight: bold;'
+        else:
+            style += ' color: black;' # 나머지는 검은색 글씨
+            
+        styles.append(style)
+        
+    return styles
 
 # 6. 메인 함수
 def main():
@@ -199,9 +212,9 @@ def main():
     
     if not df_kr.empty:
         # Pandas Styler 적용
-        # 1. 포맷팅 설정 (콤마, 소수점 등)
         format_dict = {
             "시가총액(억원)": "{:,.0f}",
+            "등락률": "{:+.2f}%",  # 부호 붙여서 표시
             "PER": "{:,.1f}",
             "PBR": "{:,.1f}",
             "배당수익률": "{:,.1f}",
@@ -209,17 +222,15 @@ def main():
             "ROA": "{:,.1f}"
         }
         
-        # 2. 스타일 적용 (배경색 + 포맷팅)
-        # subset에 포맷팅할 컬럼이 실제로 있는지 확인
         available_format_cols = [c for c in format_dict.keys() if c in df_kr.columns]
         
+        # 스타일 함수 적용 (axis=1은 행 단위로 처리)
         styled_df = (
             df_kr.style
-            .apply(highlight_rows, axis=1)  # 행 배경색
-            .format(format_dict, subset=available_format_cols) # 숫자 포맷
+            .apply(style_dataframe, axis=1) 
+            .format(format_dict, subset=available_format_cols)
         )
 
-        # 3. Streamlit에 표시
         st.dataframe(
             styled_df, 
             use_container_width=True, 
