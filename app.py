@@ -5,7 +5,7 @@ import pandas as pd
 # 1. 페이지 설정
 st.set_page_config(
     page_title="Market Pulse",
-    page_icon="📈",  # 아이콘 변경
+    page_icon="📈",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -13,14 +13,14 @@ st.set_page_config(
 # 2. 스타일 설정 (화이트 모드 & 모던 스타일)
 st.markdown("""
     <style>
-        /* 전체 배경 및 폰트 설정 (흰색 배경, 검은 글씨) */
+        /* 전체 배경 및 폰트 설정 */
         .stApp {
             background-color: #FFFFFF;
             color: #000000;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
         
-        /* 데이터프레임 헤더 스타일 */
+        /* 데이터프레임 스타일 */
         div[data-testid="stDataFrame"] {
             border: 1px solid #E0E0E0;
         }
@@ -114,60 +114,62 @@ def load_stock_data():
         # 1. 컬럼명 한글 변환
         df = df.rename(columns=KEY_MAP)
 
-        # 2. 데이터 가공 (요구사항 반영)
-        
-        # [요구사항 1] 소속구분 변환
-        # 데이터가 숫자형일 수도, 문자형일 수도 있으므로 문자열로 변환 후 매핑
-        df['소속구분'] = df['소속구분'].astype(str).replace({
-            '0': 'KOSPI', 
-            '1': 'KOSDAQ'
-        })
-        
-        # [요구사항 2] 등락구분 변환
-        df['등락구분'] = df['등락구분'].astype(str).replace({
-            '2': '상승', 
-            '5': '하락', 
-            '3': '보합'
-        })
+        # 2. 소속/등락 변환
+        df['소속구분'] = df['소속구분'].astype(str).replace({'0': 'KOSPI', '1': 'KOSDAQ'})
+        df['등락구분'] = df['등락구분'].astype(str).replace({'2': '상승', '5': '하락', '3': '보합'})
 
-        # [요구사항 3] 관리종목 관련 컬럼 숨김 (drop)
-        # '관리', '정지' 가 포함된 컬럼명 찾아서 제거
+        # 3. 불필요 컬럼 제거
         cols_to_drop = [col for col in df.columns if '관리' in col or '정지' in col or '상태태그' in col]
         df = df.drop(columns=cols_to_drop, errors='ignore')
 
-        # [요구사항 4-1] 시가총액 단위 '억원'으로 변환
-        # API 원본 데이터는 원 단위 문자열일 수 있으므로 숫자로 변환
-        if '시가총액' in df.columns:
-            df['시가총액'] = pd.to_numeric(df['시가총액'], errors='coerce')
-            df['시가총액'] = df['시가총액'] / 100000000  # 1억으로 나누기
-            # 보기 좋게 반올림 (선택 사항)
-            df['시가총액'] = df['시가총액'].round(0)
-
-        # 숫자형 데이터들 변환 (정렬 및 포맷팅을 위해)
-        numeric_cols = ['현재가', '주가수익비율(PER)', '배당수익률', '자기자본이익률(ROE)', '주가순자산비율(PBR)', '총자산이익률(ROA)']
+        # 4. 숫자형 변환 (에러 방지)
+        numeric_cols = ['시가총액', '현재가', '주가수익비율(PER)', '배당수익률', '자기자본이익률(ROE)', '주가순자산비율(PBR)', '총자산이익률(ROA)']
         for col in numeric_cols:
             if col in df.columns:
                  df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # [요구사항 4-2] 컬럼 순서 재배치
-        # 우선 순위 컬럼 정의
+        # 5. 시가총액 단위 변환 (원 -> 억원)
+        if '시가총액' in df.columns:
+            df['시가총액'] = df['시가총액'] / 100000000
+
+        # 6. 컬럼명 변경 (단위 추가)
+        df = df.rename(columns={
+            '시가총액': '시가총액(억원)',
+            '현재가': '현재가(원)',
+            '주가수익비율(PER)': 'PER',
+            '주가순자산비율(PBR)': 'PBR',
+            '자기자본이익률(ROE)': 'ROE',
+            '총자산이익률(ROA)': 'ROA'
+        })
+
+        # 7. 현재가 화살표 표시 (문자열로 변환됨)
+        #    참고: 숫자 정렬을 위해 원본을 남겨야 하지만, 화면 표시 우선으로 문자열 처리함.
+        def format_price_with_arrow(row):
+            price = row.get('현재가(원)', 0)
+            status = row.get('등락구분', '')
+            
+            # NaN 처리
+            if pd.isna(price): return "-"
+            
+            # 기호 결정
+            symbol = "-"
+            if status == '상승': symbol = "▲"
+            elif status == '하락': symbol = "▼"
+            
+            # 포맷팅 (기호 + 천단위 콤마)
+            return f"{symbol} {int(price):,}"
+
+        if '현재가(원)' in df.columns:
+            df['현재가(원)'] = df.apply(format_price_with_arrow, axis=1)
+
+        # 8. 컬럼 순서 재배치
         priority_cols = [
-            '종목명', '종목코드', '시가총액', '현재가', 
-            '주가수익비율(PER)', '배당수익률', '자기자본이익률(ROE)', 
-            '주가순자산비율(PBR)', '총자산이익률(ROA)'
+            '종목명', '종목코드', '시가총액(억원)', '현재가(원)', 
+            'PER', '배당수익률', 'ROE', 'PBR', 'ROA'
         ]
-        
-        # 실제 데이터프레임에 존재하는 컬럼만 필터링 (에러 방지)
         existing_priority = [c for c in priority_cols if c in df.columns]
-        
-        # 나머지 컬럼들
         other_cols = [c for c in df.columns if c not in existing_priority]
-        
-        # 최종 순서 적용
         df = df[existing_priority + other_cols]
-        
-        # 시가총액 컬럼명 변경 (단위 표시)
-        df = df.rename(columns={'시가총액': '시가총액(억원)'})
         
         return df
         
@@ -175,30 +177,54 @@ def load_stock_data():
         st.error(f"데이터 처리 중 오류 발생: {e}")
         return pd.DataFrame()
 
-# 5. 메인 함수
+# 5. 행 배경색 스타일링 함수
+def highlight_rows(row):
+    status = row.get('등락구분', '')
+    
+    # 가독성을 위해 아주 연한 파스텔톤 사용
+    if status == '상승':
+        color = 'background-color: #FFF0F0; color: black;' # 연한 빨강
+    elif status == '하락':
+        color = 'background-color: #F0F8FF; color: black;' # 연한 파랑 (AliceBlue)
+    else:
+        color = 'background-color: #FFFFFF; color: black;' # 흰색
+        
+    return [color] * len(row)
+
+# 6. 메인 함수
 def main():
     st.title("KOREA STOCK MARKET SUM")
     
     df_kr = load_stock_data()
     
     if not df_kr.empty:
-        # 데이터프레임 표시 설정
+        # Pandas Styler 적용
+        # 1. 포맷팅 설정 (콤마, 소수점 등)
+        format_dict = {
+            "시가총액(억원)": "{:,.0f}",
+            "PER": "{:,.1f}",
+            "PBR": "{:,.1f}",
+            "배당수익률": "{:,.1f}",
+            "ROE": "{:,.1f}",
+            "ROA": "{:,.1f}"
+        }
+        
+        # 2. 스타일 적용 (배경색 + 포맷팅)
+        # subset에 포맷팅할 컬럼이 실제로 있는지 확인
+        available_format_cols = [c for c in format_dict.keys() if c in df_kr.columns]
+        
+        styled_df = (
+            df_kr.style
+            .apply(highlight_rows, axis=1)  # 행 배경색
+            .format(format_dict, subset=available_format_cols) # 숫자 포맷
+        )
+
+        # 3. Streamlit에 표시
         st.dataframe(
-            df_kr, 
+            styled_df, 
             use_container_width=True, 
             hide_index=True,
-            height=800,
-            column_config={
-                "시가총액(억원)": st.column_config.NumberColumn(
-                    format="%d 억원"
-                ),
-                "현재가": st.column_config.NumberColumn(
-                    format="%d 원"
-                ),
-                "배당수익률": st.column_config.NumberColumn(
-                    format="%.2f %%"
-                )
-            }
+            height=800
         )
         
         cnt = len(df_kr)
