@@ -116,8 +116,7 @@ def load_stock_data(market_type="ALL", page_size=10):
         if df.empty:
             return df
 
-        # [NEW] 순위 컬럼 생성 (인덱스 + 1)
-        # 데이터를 가져온 직후가 시가총액 순서이므로 이때 순위를 매깁니다.
+        # 순위 컬럼 생성 (인덱스 + 1)
         df['순위'] = df.index + 1
 
         # 1. 컬럼명 한글 변환
@@ -164,7 +163,7 @@ def load_stock_data(market_type="ALL", page_size=10):
         if '현재가(원)' in df.columns:
             df['현재가(원)'] = df.apply(format_price_with_arrow, axis=1)
 
-        # 8. 컬럼 순서 재배치 ('순위'를 가장 앞으로)
+        # 8. 컬럼 순서 재배치
         priority_cols = [
             '순위', '종목명', '종목코드', '시가총액(억원)', '현재가(원)', '등락률',
             'PER', '배당수익률', 'ROE', 'PBR', 'ROA'
@@ -211,8 +210,6 @@ def main():
     market_options = {"전체": "ALL", "코스피": "KOSPI", "코스닥": "KOSDAQ"}
     size_options = [10, 50, 100]
     
-    # 레이아웃 배치 (시장선택 / 조회개수 / 검색창)
-    # 검색창 공간을 위해 비율을 1:1:2 정도로 할당
     col1, col2, col3 = st.columns([1, 1, 2])
     
     with col1:
@@ -222,7 +219,6 @@ def main():
         selected_size = st.selectbox("조회 개수 (Top N)", options=size_options, index=0)
 
     with col3:
-        # [NEW] 검색 기능
         search_term = st.text_input("종목명 검색", placeholder="종목명을 입력하세요 (예: 삼성)")
     
     # 데이터 로드
@@ -230,9 +226,8 @@ def main():
     df_kr = load_stock_data(selected_code, selected_size)
     
     if not df_kr.empty:
-        # [NEW] 검색 필터링 로직
+        # 검색 필터링
         if search_term:
-            # '종목명'에 검색어가 포함된 행만 필터링
             df_kr = df_kr[df_kr['종목명'].str.contains(search_term)]
 
         # 포맷팅 설정
@@ -255,23 +250,30 @@ def main():
             .format(format_dict, subset=available_format_cols)
         )
 
-        # 동적 높이 계산
+        # [수정됨] 높이 계산 로직 개선 (Sticky Header를 위한 Max Height 설정)
         row_height = 35
         header_height = 40
         buffer = 3
         
-        # 필터링된 데이터 개수(len(df_kr)) 기준으로 높이 계산
-        dynamic_height = (len(df_kr) * row_height) + header_height + buffer
-
-        # 최소 높이 설정 (데이터가 없을 때 너무 납작해지지 않도록)
-        if dynamic_height < 100:
-            dynamic_height = 100
+        # 데이터 개수에 따른 높이 계산
+        calculated_height = (len(df_kr) * row_height) + header_height + buffer
+        
+        # 최대 높이 설정 (약 20줄 정도 보여주고 스크롤 생성)
+        # 이 높이를 넘어가면 내부에 스크롤바가 생기고 헤더가 고정됩니다.
+        MAX_TABLE_HEIGHT = 750 
+        
+        # 계산된 높이와 최대 높이 중 작은 값을 선택
+        final_height = min(calculated_height, MAX_TABLE_HEIGHT)
+        
+        # 최소 높이 보정
+        if final_height < 100:
+            final_height = 100
 
         st.dataframe(
             styled_df, 
             use_container_width=True, 
             hide_index=True,
-            height=dynamic_height
+            height=final_height
         )
         
         cnt = len(df_kr)
