@@ -201,15 +201,15 @@ def main():
     df_total_100 = load_stock_data(selected_code, 100)
     
     if not df_total_100.empty:
-        # Gauge 렌더링 함수
-        def render_market_gauge(df_subset, title):
+        # Gauge HTML 생성 함수 (기존 render_market_gauge에서 변경)
+        def get_market_gauge_html(df_subset, title):
             counts = df_subset['등락구분'].value_counts()
             up_cnt, down_cnt, steady_cnt = int(counts.get('상승', 0)), int(counts.get('하락', 0)), int(counts.get('보합', 0))
             total = up_cnt + down_cnt + steady_cnt
             
             if total > 0:
                 up_per, down_per, steady_per = (up_cnt/total)*100, (down_cnt/total)*100, (steady_cnt/total)*100
-                st.markdown(f"""
+                return f"""
                     <div style="margin-bottom: 15px;">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.8rem; font-weight: 600;">
                             <span style="color: #444;">{title}</span>
@@ -225,14 +225,22 @@ def main():
                             <div style="width: {down_per}%; background-color: #1C83E1;"></div>
                         </div>
                     </div>
-                """, unsafe_allow_html=True)
+                """
+            return ""
 
-        # 3개의 Gauge 표시 구역
-        st.markdown("<div style='margin-bottom: 25px; padding: 15px; border: 1px solid #F0F0F0; border-radius: 10px; background-color: #FAFAFA;'>", unsafe_allow_html=True)
-        render_market_gauge(df_total_100.head(10), "Top 10 시장 현황")
-        render_market_gauge(df_total_100.head(50), "Top 50 시장 현황")
-        render_market_gauge(df_total_100.head(100), "Top 100 시장 현황")
-        st.markdown("</div>", unsafe_allow_html=True)
+        # --- 3개의 Gauge 표시 구역 (수정된 부분) ---
+        gauge_combined_html = ""
+        gauge_combined_html += get_market_gauge_html(df_total_100.head(10), "Top 10 시장 현황")
+        gauge_combined_html += get_market_gauge_html(df_total_100.head(50), "Top 50 시장 현황")
+        gauge_combined_html += get_market_gauge_html(df_total_100.head(100), "Top 100 시장 현황")
+
+        # 하나의 컨테이너 안에 모든 Gauge를 넣어서 출력
+        st.markdown(f"""
+            <div style='margin-bottom: 25px; padding: 15px; border: 1px solid #F0F0F0; border-radius: 10px; background-color: #FAFAFA;'>
+                {gauge_combined_html}
+            </div>
+        """, unsafe_allow_html=True)
+        # ------------------------------------------
 
         # 테이블용 데이터 필터링
         df_kr = df_total_100.head(selected_size).copy()
