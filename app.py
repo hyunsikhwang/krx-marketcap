@@ -138,7 +138,6 @@ def load_stock_data(market_type="ALL", page_size=10):
             "발행사명", "실시간추정순자산가치(iNAV)",
             "종목타입", "시장경보구분", "장운영상태", "상장주식수", 
             "거래량변동", "거래량변동률", "전일거래량", "외국인보유수량"
-            # "등락구분"은 스타일링 계산을 위해 여기서 삭제하지 않습니다.
         ]
 
         cols_to_drop = []
@@ -303,6 +302,34 @@ def main():
         if search_term:
             df_kr = df_kr[df_kr['종목명'].str.contains(search_term)]
 
+        # --- 추가된 부분: 시장 등락 현황 Gauge ---
+        counts = df_kr['등락구분'].value_counts()
+        up_cnt = int(counts.get('상승', 0))
+        down_cnt = int(counts.get('하락', 0))
+        steady_cnt = int(counts.get('보합', 0))
+        total_gauge = up_cnt + down_cnt + steady_cnt
+
+        if total_gauge > 0:
+            up_per = (up_cnt / total_gauge) * 100
+            down_per = (down_cnt / total_gauge) * 100
+            steady_per = (steady_cnt / total_gauge) * 100
+            
+            st.markdown(f"""
+                <div style="margin-bottom: 25px; padding: 12px; border: 1px solid #F0F0F0; border-radius: 10px; background-color: #FAFAFA;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9rem; font-weight: 600;">
+                        <span style="color: #FF4B4B;">상승 {up_cnt}</span>
+                        <span style="color: #666666;">보합 {steady_cnt}</span>
+                        <span style="color: #1C83E1;">하락 {down_cnt}</span>
+                    </div>
+                    <div style="display: flex; width: 100%; height: 12px; background-color: #E0E0E0; border-radius: 6px; overflow: hidden;">
+                        <div style="width: {up_per}%; background-color: #FF4B4B;"></div>
+                        <div style="width: {steady_per}%; background-color: #CCCCCC;"></div>
+                        <div style="width: {down_per}%; background-color: #1C83E1;"></div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+        # ------------------------------------------
+
         format_dict = {
             "시가총액(억원)": "{:,.0f}",
             "등락률": "{:+.2f}%",
@@ -337,7 +364,6 @@ def main():
         
         available_format_cols = [c for c in format_dict.keys() if c in df_kr.columns]
         
-        # 스타일 적용 (여기서는 .hide를 쓰지 않음)
         styled_df = (
             df_kr.style
             .apply(style_dataframe, axis=1) 
@@ -354,7 +380,6 @@ def main():
         if final_height < 100:
             final_height = 100
 
-        # column_config를 사용하여 "등락구분" 컬럼을 화면에서 숨김 처리
         st.dataframe(
             styled_df, 
             width='stretch', 
