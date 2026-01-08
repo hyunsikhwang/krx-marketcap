@@ -106,111 +106,57 @@ def load_stock_data(market_type="ALL", page_size=10):
         response.raise_for_status()
         
         raw_data = response.json()
-        json_data = []
-        
-        if isinstance(raw_data, list):
-            json_data = raw_data
-        elif isinstance(raw_data, dict):
-            json_data = raw_data.get('data', [])
+        json_data = raw_data if isinstance(raw_data, list) else raw_data.get('data', [])
         
         df = pd.DataFrame(json_data)
-        
-        if df.empty:
-            return df
+        if df.empty: return df
 
-        # 순위 컬럼 생성 (인덱스 + 1)
         df['순위'] = df.index + 1
-
-        # 1. 컬럼명 한글 변환
         df = df.rename(columns=KEY_MAP)
-
-        # 2. 소속/등락 변환
         df['소속구분'] = df['소속구분'].astype(str).replace({'0': 'KOSPI', '1': 'KOSDAQ'})
         df['등락구분'] = df['등락구분'].astype(str).replace({'2': '상승', '5': '하락', '3': '보합'})
 
-        # 3. 불필요 컬럼 제거
         exclude_columns = [
             "매출액증가율", "영업이익", "영업이익증가율", "당기순이익", "상장일",
             "연속상한가일수", "연속하한가일수", "연속상하한가일수", "누적상한가일수", "누적하한가일수",
-            "유보율", "종목정보", "참조지수레버리지타입",
-            "1개월수익률", "3개월수익률", "6개월수익률", "1년수익률",
-            "순자산가치(NAV)", "괴리율부호", "괴리율", "순자산총액", "총보수",
-            "발행사명", "실시간추정순자산가치(iNAV)",
-            "종목타입", "시장경보구분", "장운영상태", "상장주식수", 
-            "거래량변동", "거래량변동률", "전일거래량", "외국인보유수량"
+            "유보율", "종목정보", "참조지수레버리지타입", "1개월수익률", "3개월수익률", "6개월수익률", 
+            "1년수익률", "순자산가치(NAV)", "괴리율부호", "괴리율", "순자산총액", "총보수",
+            "발행사명", "실시간추정순자산가치(iNAV)", "종목타입", "시장경보구분", "장운영상태", 
+            "상장주식수", "거래량변동", "거래량변동률", "전일거래량", "외국인보유수량"
         ]
 
-        cols_to_drop = []
-        for col in df.columns:
-            if any(k in col for k in ['관리', '정지', '상태태그']):
-                cols_to_drop.append(col)
-            elif 'ETF' in col:
-                cols_to_drop.append(col)
-            elif col in exclude_columns:
-                cols_to_drop.append(col)
-
+        cols_to_drop = [col for col in df.columns if any(k in col for k in ['관리', '정지', '상태태그', 'ETF']) or col in exclude_columns]
         df = df.drop(columns=cols_to_drop, errors='ignore')
 
-        # 4. 숫자형 변환
-        numeric_cols = ['시가총액', '현재가', '등락률', '주가수익비율(PER)', '배당수익률', 
-                        '자기자본이익률(ROE)', '주가순자산비율(PBR)', '총자산이익률(ROA)', 
-                        "상한가", "하한가", "거래량", "시가", "고가", "저가", 
-                        "매수호가", "매수잔량", "매도호가", "매도잔량", 
-                        "전일비", "거래대금", "외국인비율", "외국인보유수량", "상장주식수",
-                        "주당순이익(EPS)", "52주최고가", "52주최저가",
-                        "자산총계", "부채총계", "매출액", "주당배당금"]
+        numeric_cols = ['시가총액', '현재가', '등락률', '주가수익비율(PER)', '배당수익률', '자기자본이익률(ROE)', 
+                        '주가순자산비율(PBR)', '총자산이익률(ROA)', "상한가", "하한가", "거래량", "시가", "고가", 
+                        "저가", "매수호가", "매수잔량", "매도호가", "매도잔량", "전일비", "거래대금", "외국인비율", 
+                        "상장주식수", "주당순이익(EPS)", "52주최고가", "52주최저가", "자산총계", "부채총계", "매출액", "주당배당금"]
 
         for col in numeric_cols:
-            if col in df.columns:
-                 df[col] = pd.to_numeric(df[col], errors='coerce')
+            if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # 5. 단위 변환
-        if '시가총액' in df.columns:
-            df['시가총액'] = df['시가총액'] / 100000000
-        if '거래대금' in df.columns:
-            df['거래대금'] = df['거래대금'] / 100000000
-        if '외국인보유수량' in df.columns:
-            df['외국인보유수량'] = df['외국인보유수량'] / 10000
-        if '상장주식수' in df.columns:
-            df['상장주식수'] = df['상장주식수'] / 10000
+        if '시가총액' in df.columns: df['시가총액'] = df['시가총액'] / 100000000
+        if '거래대금' in df.columns: df['거래대금'] = df['거래대금'] / 100000000
+        if '상장주식수' in df.columns: df['상장주식수'] = df['상장주식수'] / 10000
 
-        # 6. 컬럼명 변경
-        rename_map = {
-            '시가총액': '시가총액(억원)',
-            '현재가': '현재가(원)',
-            '주가수익비율(PER)': 'PER',
-            '주가순자산비율(PBR)': 'PBR',
-            '자기자본이익률(ROE)': 'ROE',
-            '총자산이익률(ROA)': 'ROA',
-            '거래대금': '거래대금(억원)',
-            '외국인보유수량': '외국인보유수량(만주)',
-            '상장주식수': '상장주식수(만주)'
-        }
+        rename_map = {'시가총액': '시가총액(억원)', '현재가': '현재가(원)', '주가수익비율(PER)': 'PER', 
+                      '주가순자산비율(PBR)': 'PBR', '자기자본이익률(ROE)': 'ROE', '총자산이익률(ROA)': 'ROA', 
+                      '거래대금': '거래대금(억원)', '상장주식수': '상장주식수(만주)'}
         df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
 
-        # 7. 현재가 화살표 표시
         def format_price_with_arrow(row):
-            price = row.get('현재가(원)', 0)
-            status = row.get('등락구분', '')
+            price, status = row.get('현재가(원)', 0), row.get('등락구분', '')
             if pd.isna(price): return "-"
-            symbol = "-"
-            if status == '상승': symbol = "▲"
-            elif status == '하락': symbol = "▼"
+            symbol = "▲" if status == '상승' else "▼" if status == '하락' else "-"
             return f"{symbol} {int(price):,}"
 
-        if '현재가(원)' in df.columns:
-            df['현재가(원)'] = df.apply(format_price_with_arrow, axis=1)
+        if '현재가(원)' in df.columns: df['현재가(원)'] = df.apply(format_price_with_arrow, axis=1)
 
-        # 8. 컬럼 순서 재배치
-        priority_cols = [
-            '순위', '종목명', '종목코드', '소속구분','시가총액(억원)', '현재가(원)', '등락률',
-            'PER', '배당수익률', 'ROE', 'PBR', 'ROA'
-        ]
+        priority_cols = ['순위', '종목명', '종목코드', '소속구분','시가총액(억원)', '현재가(원)', '등락률', 'PER', '배당수익률', 'ROE', 'PBR', 'ROA']
         existing_priority = [c for c in priority_cols if c in df.columns]
         other_cols = [c for c in df.columns if c not in existing_priority]
-        df = df[existing_priority + other_cols]
-        
-        return df
+        return df[existing_priority + other_cols]
         
     except Exception as e:
         st.error(f"데이터 처리 중 오류 발생: {e}")
@@ -219,27 +165,10 @@ def load_stock_data(market_type="ALL", page_size=10):
 # 5. 스타일링 함수
 def style_dataframe(row):
     status = row.get('등락구분', '')
+    bg_color = '#FFF0F0' if status == '상승' else '#F0F8FF' if status == '하락' else '#FFFFFF'
+    font_color = 'red' if status == '상승' else 'blue' if status == '하락' else 'black'
     
-    if status == '상승':
-        bg_color = '#FFF0F0'
-        font_color = 'red'
-    elif status == '하락':
-        bg_color = '#F0F8FF'
-        font_color = 'blue'
-    else:
-        bg_color = '#FFFFFF'
-        font_color = 'black'
-    
-    styles = []
-    for col in row.index:
-        style = f'background-color: {bg_color};'
-        if col in ['현재가(원)', '등락률']:
-            style += f' color: {font_color}; font-weight: bold;'
-        else:
-            style += ' color: black;'
-        styles.append(style)
-        
-    return styles
+    return [f"background-color: {bg_color}; color: {'black' if col not in ['현재가(원)', '등락률'] else font_color}; font-weight: {'bold' if col in ['현재가(원)', '등락률'] else 'normal'};" for col in row.index]
 
 # 6. 메인 함수
 def main():
@@ -251,151 +180,80 @@ def main():
 
     if saved_market is not None and "initialized" not in st.session_state:
         st.session_state["market_sb"] = saved_market
-        if saved_size is not None:
-            st.session_state["size_sb"] = int(saved_size)
+        if saved_size is not None: st.session_state["size_sb"] = int(saved_size)
         st.session_state["initialized"] = True
         st.rerun()
 
     def save_settings():
-        cookie_manager.set(
-            "market_pref", 
-            st.session_state["market_sb"], 
-            expires_at=datetime.datetime.now() + datetime.timedelta(days=30),
-            key="set_market"
-        )
-        cookie_manager.set(
-            "size_pref", 
-            st.session_state["size_sb"], 
-            expires_at=datetime.datetime.now() + datetime.timedelta(days=30),
-            key="set_size"
-        )
+        cookie_manager.set("market_pref", st.session_state["market_sb"], expires_at=datetime.datetime.now() + datetime.timedelta(days=30), key="set_market")
+        cookie_manager.set("size_pref", st.session_state["size_sb"], expires_at=datetime.datetime.now() + datetime.timedelta(days=30), key="set_size")
 
     market_options = {"전체": "ALL", "코스피": "KOSPI", "코스닥": "KOSDAQ"}
     size_options = [10, 50, 100]
     
     col1, col2, col3 = st.columns([1, 1, 2])
-    
-    with col1:
-        selected_label = st.selectbox(
-            "시장 선택", 
-            options=list(market_options.keys()), 
-            key="market_sb",
-            on_change=save_settings 
-        )
-    
-    with col2:
-        selected_size = st.selectbox(
-            "조회 개수 (Top N)", 
-            options=size_options, 
-            key="size_sb",
-            on_change=save_settings
-        )
+    with col1: selected_label = st.selectbox("시장 선택", options=list(market_options.keys()), key="market_sb", on_change=save_settings)
+    with col2: selected_size = st.selectbox("조회 개수 (Top N)", options=size_options, key="size_sb", on_change=save_settings)
+    with col3: search_term = st.text_input("종목명 검색", placeholder="종목명을 입력하세요 (예: 삼성)")
 
-    with col3:
-        search_term = st.text_input("종목명 검색", placeholder="종목명을 입력하세요 (예: 삼성)")
-
-    # 데이터 로드 및 출력
+    # 데이터 로드 (Gauge용 100개 + 테이블용)
     selected_code = market_options[selected_label]
-    df_kr = load_stock_data(selected_code, selected_size)
+    df_total_100 = load_stock_data(selected_code, 100)
     
-    if not df_kr.empty:
-        if search_term:
-            df_kr = df_kr[df_kr['종목명'].str.contains(search_term)]
-
-        # --- 추가된 부분: 시장 등락 현황 Gauge ---
-        counts = df_kr['등락구분'].value_counts()
-        up_cnt = int(counts.get('상승', 0))
-        down_cnt = int(counts.get('하락', 0))
-        steady_cnt = int(counts.get('보합', 0))
-        total_gauge = up_cnt + down_cnt + steady_cnt
-
-        if total_gauge > 0:
-            up_per = (up_cnt / total_gauge) * 100
-            down_per = (down_cnt / total_gauge) * 100
-            steady_per = (steady_cnt / total_gauge) * 100
+    if not df_total_100.empty:
+        # Gauge 렌더링 함수
+        def render_market_gauge(df_subset, title):
+            counts = df_subset['등락구분'].value_counts()
+            up_cnt, down_cnt, steady_cnt = int(counts.get('상승', 0)), int(counts.get('하락', 0)), int(counts.get('보합', 0))
+            total = up_cnt + down_cnt + steady_cnt
             
-            st.markdown(f"""
-                <div style="margin-bottom: 25px; padding: 12px; border: 1px solid #F0F0F0; border-radius: 10px; background-color: #FAFAFA;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9rem; font-weight: 600;">
-                        <span style="color: #FF4B4B;">상승 {up_cnt}</span>
-                        <span style="color: #666666;">보합 {steady_cnt}</span>
-                        <span style="color: #1C83E1;">하락 {down_cnt}</span>
+            if total > 0:
+                up_per, down_per, steady_per = (up_cnt/total)*100, (down_cnt/total)*100, (steady_cnt/total)*100
+                st.markdown(f"""
+                    <div style="margin-bottom: 15px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.8rem; font-weight: 600;">
+                            <span style="color: #444;">{title}</span>
+                            <span>
+                                <span style="color: #FF4B4B;">상승 {up_cnt}</span> | 
+                                <span style="color: #666;">보합 {steady_cnt}</span> | 
+                                <span style="color: #1C83E1;">하락 {down_cnt}</span>
+                            </span>
+                        </div>
+                        <div style="display: flex; width: 100%; height: 8px; background-color: #EEE; border-radius: 4px; overflow: hidden;">
+                            <div style="width: {up_per}%; background-color: #FF4B4B;"></div>
+                            <div style="width: {steady_per}%; background-color: #DDD;"></div>
+                            <div style="width: {down_per}%; background-color: #1C83E1;"></div>
+                        </div>
                     </div>
-                    <div style="display: flex; width: 100%; height: 12px; background-color: #E0E0E0; border-radius: 6px; overflow: hidden;">
-                        <div style="width: {up_per}%; background-color: #FF4B4B;"></div>
-                        <div style="width: {steady_per}%; background-color: #CCCCCC;"></div>
-                        <div style="width: {down_per}%; background-color: #1C83E1;"></div>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-        # ------------------------------------------
+                """, unsafe_allow_html=True)
 
-        format_dict = {
-            "시가총액(억원)": "{:,.0f}",
-            "등락률": "{:+.2f}%",
-            "PER": "{:,.1f}",
-            "PBR": "{:,.1f}",
-            "배당수익률": "{:,.1f}",
-            "ROE": "{:,.1f}",
-            "ROA": "{:,.1f}",
-            "상한가": "{:,.0f}",
-            "하한가": "{:,.0f}",
-            "거래량": "{:,.0f}",
-            "시가": "{:,.0f}",
-            "고가": "{:,.0f}",
-            "저가": "{:,.0f}",
-            "매수호가": "{:,.0f}",
-            "매수잔량": "{:,.0f}",
-            "매도호가": "{:,.0f}",
-            "매도잔량": "{:,.0f}",
-            "전일비": "{:,.0f}",
-            "거래대금(억원)": "{:,.0f}",
-            "외국인비율": "{:,.1f}%",
-            "외국인보유수량": "{:,.0f}",
-            "상장주식수": "{:,.0f}",
-            "주당순이익(EPS)": "{:,.0f}",
-            "52주최고가": "{:,.0f}",
-            "52주최저가": "{:,.0f}",
-            "자산총계": "{:,.0f}",
-            "부채총계": "{:,.0f}",
-            "매출액": "{:,.0f}",
-            "주당배당금": "{:,.0f}"
-        }
+        # 3개의 Gauge 표시 구역
+        st.markdown("<div style='margin-bottom: 25px; padding: 15px; border: 1px solid #F0F0F0; border-radius: 10px; background-color: #FAFAFA;'>", unsafe_allow_html=True)
+        render_market_gauge(df_total_100.head(10), "Top 10 시장 현황")
+        render_market_gauge(df_total_100.head(50), "Top 50 시장 현황")
+        render_market_gauge(df_total_100.head(100), "Top 100 시장 현황")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # 테이블용 데이터 필터링
+        df_kr = df_total_100.head(selected_size).copy()
+        if search_term: df_kr = df_kr[df_kr['종목명'].str.contains(search_term)]
+
+        format_dict = {"시가총액(억원)": "{:,.0f}", "등락률": "{:+.2f}%", "PER": "{:,.1f}", "PBR": "{:,.1f}", 
+                       "배당수익률": "{:,.1f}", "ROE": "{:,.1f}", "ROA": "{:,.1f}", "상한가": "{:,.0f}", 
+                       "하한가": "{:,.0f}", "거래량": "{:,.0f}", "시가": "{:,.0f}", "고가": "{:,.0f}", 
+                       "저가": "{:,.0f}", "매수호가": "{:,.0f}", "매수잔량": "{:,.0f}", "매도호가": "{:,.0f}", 
+                       "매도잔량": "{:,.0f}", "전일비": "{:,.0f}", "거래대금(억원)": "{:,.0f}", 
+                       "외국인비율": "{:,.1f}%", "상장주식수": "{:,.0f}", "주당순이익(EPS)": "{:,.0f}", 
+                       "52주최고가": "{:,.0f}", "52주최저가": "{:,.0f}", "자산총계": "{:,.0f}", 
+                       "부채총계": "{:,.0f}", "매출액": "{:,.0f}", "주당배당금": "{:,.0f}"}
         
         available_format_cols = [c for c in format_dict.keys() if c in df_kr.columns]
+        styled_df = df_kr.style.apply(style_dataframe, axis=1).format(format_dict, subset=available_format_cols)
         
-        styled_df = (
-            df_kr.style
-            .apply(style_dataframe, axis=1) 
-            .format(format_dict, subset=available_format_cols)
-        )
-
-        row_height = 35
-        header_height = 40
-        buffer = 3
+        final_height = max(100, min((len(df_kr) * 35) + 43, 750))
+        st.dataframe(styled_df, width='stretch', hide_index=True, height=final_height, column_config={"등락구분": None})
         
-        calculated_height = (len(df_kr) * row_height) + header_height + buffer
-        MAX_TABLE_HEIGHT = 750 
-        final_height = min(calculated_height, MAX_TABLE_HEIGHT)
-        if final_height < 100:
-            final_height = 100
-
-        st.dataframe(
-            styled_df, 
-            width='stretch', 
-            hide_index=True,
-            height=final_height,
-            column_config={
-                "등락구분": None
-            }
-        )
-        
-        cnt = len(df_kr)
-        st.markdown(f"""
-        <div style="text-align: right; color: #888; font-size: 0.8em; margin-top: 10px;">
-            Items displayed: {cnt} | Source: Naver Finance
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f'<div style="text-align: right; color: #888; font-size: 0.8em; margin-top: 10px;">Items displayed: {len(df_kr)} | Source: Naver Finance</div>', unsafe_allow_html=True)
     else:
         st.write("데이터를 불러올 수 없습니다.")
 
