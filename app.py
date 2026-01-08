@@ -201,7 +201,7 @@ def main():
     df_total_100 = load_stock_data(selected_code, 100)
     
     if not df_total_100.empty:
-        # Gauge HTML 생성 함수 (기존 render_market_gauge에서 변경)
+        # Gauge HTML 생성 함수 (들여쓰기 오작동 방지를 위해 왼쪽 정렬)
         def get_market_gauge_html(df_subset, title):
             counts = df_subset['등락구분'].value_counts()
             up_cnt, down_cnt, steady_cnt = int(counts.get('상승', 0)), int(counts.get('하락', 0)), int(counts.get('보합', 0))
@@ -209,38 +209,39 @@ def main():
             
             if total > 0:
                 up_per, down_per, steady_per = (up_cnt/total)*100, (down_cnt/total)*100, (steady_cnt/total)*100
-                return f"""
-                    <div style="margin-bottom: 15px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.8rem; font-weight: 600;">
-                            <span style="color: #444;">{title}</span>
-                            <span>
-                                <span style="color: #FF4B4B;">상승 {up_cnt} ({up_per:.1f}%)</span> | 
-                                <span style="color: #666;">보합 {steady_cnt} ({steady_per:.1f}%)</span> | 
-                                <span style="color: #1C83E1;">하락 {down_cnt} ({down_per:.1f}%)</span>
-                            </span>
-                        </div>
-                        <div style="display: flex; width: 100%; height: 8px; background-color: #EEE; border-radius: 4px; overflow: hidden;">
-                            <div style="width: {up_per}%; background-color: #FF4B4B;"></div>
-                            <div style="width: {steady_per}%; background-color: #DDD;"></div>
-                            <div style="width: {down_per}%; background-color: #1C83E1;"></div>
-                        </div>
-                    </div>
-                """
+                # 문자열 앞의 공백이 마크다운 '코드블록'으로 인식되지 않도록 처리
+                return (
+f'<div style="margin-bottom: 15px;">'
+    f'<div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.8rem; font-weight: 600;">'
+        f'<span style="color: #444;">{title}</span>'
+        f'<span>'
+            f'<span style="color: #FF4B4B;">상승 {up_cnt} ({up_per:.1f}%)</span> | '
+            f'<span style="color: #666;">보합 {steady_cnt} ({steady_per:.1f}%)</span> | '
+            f'<span style="color: #1C83E1;">하락 {down_cnt} ({down_per:.1f}%)</span>'
+        f'</span>'
+    f'</div>'
+    f'<div style="display: flex; width: 100%; height: 8px; background-color: #EEE; border-radius: 4px; overflow: hidden;">'
+        f'<div style="width: {up_per}%; background-color: #FF4B4B;"></div>'
+        f'<div style="width: {steady_per}%; background-color: #DDD;"></div>'
+        f'<div style="width: {down_per}%; background-color: #1C83E1;"></div>'
+    f'</div>'
+f'</div>'
+                )
             return ""
 
-        # --- 3개의 Gauge 표시 구역 (수정된 부분) ---
+        # --- 3개의 Gauge 표시 구역 ---
         gauge_combined_html = ""
         gauge_combined_html += get_market_gauge_html(df_total_100.head(10), "Top 10 시장 현황")
         gauge_combined_html += get_market_gauge_html(df_total_100.head(50), "Top 50 시장 현황")
         gauge_combined_html += get_market_gauge_html(df_total_100.head(100), "Top 100 시장 현황")
 
-        # 하나의 컨테이너 안에 모든 Gauge를 넣어서 출력
-        st.markdown(f"""
-            <div style='margin-bottom: 25px; padding: 15px; border: 1px solid #F0F0F0; border-radius: 10px; background-color: #FAFAFA;'>
-                {gauge_combined_html}
-            </div>
-        """, unsafe_allow_html=True)
-        # ------------------------------------------
+        # HTML 컨테이너 출력 (문자열 시작점에 공백이 없어야 함)
+        st.markdown(
+            f'<div style="margin-bottom: 25px; padding: 15px; border: 1px solid #F0F0F0; border-radius: 10px; background-color: #FAFAFA;">'
+            f'{gauge_combined_html}'
+            f'</div>', 
+            unsafe_allow_html=True
+        )
 
         # 테이블용 데이터 필터링
         df_kr = df_total_100.head(selected_size).copy()
