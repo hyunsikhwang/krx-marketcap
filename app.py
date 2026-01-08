@@ -214,9 +214,9 @@ def main():
                         <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.8rem; font-weight: 600;">
                             <span style="color: #444;">{title}</span>
                             <span>
-                                <span style="color: #FF4B4B;">상승 {up_cnt}</span> | 
-                                <span style="color: #666;">보합 {steady_cnt}</span> | 
-                                <span style="color: #1C83E1;">하락 {down_cnt}</span>
+                                <span style="color: #FF4B4B;">상승 {up_cnt} ({up_per:.1f}%)</span> | 
+                                <span style="color: #666;">보합 {steady_cnt} ({steady_per:.1f}%)</span> | 
+                                <span style="color: #1C83E1;">하락 {down_cnt} ({down_per:.1f}%)</span>
                             </span>
                         </div>
                         <div style="display: flex; width: 100%; height: 8px; background-color: #EEE; border-radius: 4px; overflow: hidden;">
