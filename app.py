@@ -231,9 +231,9 @@ f'</div>'
 
         # --- 3개의 Gauge 표시 구역 ---
         gauge_combined_html = ""
-        gauge_combined_html += get_market_gauge_html(df_total_100.head(10), "Top 10 시장 현황")
-        gauge_combined_html += get_market_gauge_html(df_total_100.head(50), "Top 50 시장 현황")
-        gauge_combined_html += get_market_gauge_html(df_total_100.head(100), "Top 100 시장 현황")
+        gauge_combined_html += get_market_gauge_html(df_total_100.head(10), "Top 10")
+        gauge_combined_html += get_market_gauge_html(df_total_100.head(50), "Top 50")
+        gauge_combined_html += get_market_gauge_html(df_total_100.head(100), "Top 100")
 
         # HTML 컨테이너 출력 (문자열 시작점에 공백이 없어야 함)
         st.markdown(
