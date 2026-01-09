@@ -189,18 +189,18 @@ def main():
         cookie_manager.set("size_pref", st.session_state["size_sb"], expires_at=datetime.datetime.now() + datetime.timedelta(days=30), key="set_size")
 
     market_options = {"전체": "ALL", "코스피": "KOSPI", "코스닥": "KOSDAQ"}
-    size_options = [10, 50, 100]
+    size_options = [50, 100, 200]
     
     col1, col2, col3 = st.columns([1, 1, 2])
     with col1: selected_label = st.selectbox("시장 선택", options=list(market_options.keys()), key="market_sb", on_change=save_settings)
     with col2: selected_size = st.selectbox("조회 개수 (Top N)", options=size_options, key="size_sb", on_change=save_settings)
     with col3: search_term = st.text_input("종목명 검색", placeholder="종목명을 입력하세요 (예: 삼성)")
 
-    # 데이터 로드 (Gauge용 100개 + 테이블용)
+    # 데이터 로드 (Gauge용 200개 + 테이블용)
     selected_code = market_options[selected_label]
-    df_total_100 = load_stock_data(selected_code, 100)
+    df_total_200 = load_stock_data(selected_code, 200)
     
-    if not df_total_100.empty:
+    if not df_total_200.empty:
         # Gauge HTML 생성 함수 (들여쓰기 오작동 방지를 위해 왼쪽 정렬)
         def get_market_gauge_html(df_subset, title):
             counts = df_subset['등락구분'].value_counts()
@@ -231,9 +231,9 @@ f'</div>'
 
         # --- 3개의 Gauge 표시 구역 ---
         gauge_combined_html = ""
-        gauge_combined_html += get_market_gauge_html(df_total_100.head(10), "Top 10")
-        gauge_combined_html += get_market_gauge_html(df_total_100.head(50), "Top 50")
-        gauge_combined_html += get_market_gauge_html(df_total_100.head(100), "Top 100")
+        gauge_combined_html += get_market_gauge_html(df_total_200.head(50), "Top 50")
+        gauge_combined_html += get_market_gauge_html(df_total_200.head(100), "Top 100")
+        gauge_combined_html += get_market_gauge_html(df_total_200.head(200), "Top 200")
 
         # HTML 컨테이너 출력 (문자열 시작점에 공백이 없어야 함)
         st.markdown(
@@ -244,7 +244,7 @@ f'</div>'
         )
 
         # 테이블용 데이터 필터링
-        df_kr = df_total_100.head(selected_size).copy()
+        df_kr = df_total_200.head(selected_size).copy()
         if search_term: df_kr = df_kr[df_kr['종목명'].str.contains(search_term)]
 
         format_dict = {"시가총액(억원)": "{:,.0f}", "등락률": "{:+.2f}%", "PER": "{:,.1f}", "PBR": "{:,.1f}", 
