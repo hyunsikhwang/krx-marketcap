@@ -3,6 +3,8 @@ import requests
 import pandas as pd
 import datetime
 import extra_streamlit_components as stx
+import base64
+import os
 
 # 1. 페이지 설정
 st.set_page_config(
@@ -12,47 +14,118 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 2. 스타일 설정 (화이트 모드 & 모던 스타일)
+# 2. 스타일 및 디자인 시스템 (Value Horizon 기준)
 st.markdown("""
-    <style>
-        /* 전체 배경 및 폰트 설정 */
-        .stApp {
-            background-color: #FFFFFF;
-            color: #000000;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        }
-        
-        /* 데이터프레임 스타일 */
-        div[data-testid="stDataFrame"] {
-            border: 1px solid #E0E0E0;
-        }
-        
-        /* 불필요한 헤더 숨기기 */
-        header {visibility: hidden;}
-        .block-container {
-            padding-top: 2rem;
-            padding-bottom: 2rem;
-            max-width: 95%;
-        }
-        
-        /* 제목 스타일 */
-        h1 {
-            color: #111111;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-            border-bottom: 2px solid #000;
-            padding-bottom: 15px;
-            margin-bottom: 30px;
-        }
-        
-        /* 셀렉트박스 및 인풋 스타일 */
-        div[data-baseweb="select"], div[data-baseweb="input"] {
-            font-family: 'Helvetica Neue', sans-serif;
-        }
-    </style>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+    /* 깔끔한 배경 및 폰트 */
+    .stApp {
+        background-color: #ffffff;
+        color: #1a1a1a;
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* 컨테이너 패딩 조정 */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 2rem !important;
+        max-width: 1200px !important;
+    }
+    
+    /* 기존 헤더 및 푸터 숨기기 */
+    [data-testid="stHeader"], footer {
+        display: none !important;
+    }
+
+    /* Hero Section - Value Horizon Style */
+    .hero-container {
+        padding: 2rem 0;
+        text-align: center;
+        border-bottom: 1px solid #f0f0f0;
+        margin-bottom: 2rem;
+    }
+
+    .hero-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #111111;
+        margin-bottom: 0.5rem;
+        letter-spacing: -1px;
+    }
+
+    .hero-subtitle {
+        font-size: 1rem;
+        font-weight: 400;
+        color: #888888;
+        letter-spacing: 0.2px;
+    }
+
+    /* Search & Filter Container */
+    .filter-container {
+        background: #f9f9f9;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        border: 1px solid #eaeaea;
+    }
+
+    /* Gauge Section Design */
+    .gauge-wrapper {
+        margin-bottom: 25px;
+        padding: 20px;
+        border: 1px solid #eaeaea;
+        border-radius: 16px;
+        background-color: #ffffff;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+    }
+
+    .gauge-item {
+        margin-bottom: 18px;
+    }
+    
+    .gauge-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .gauge-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #333;
+    }
+
+    .gauge-bar-container {
+        display: flex;
+        width: 100%;
+        height: 10px;
+        background-color: #f0f0f0;
+        border-radius: 5px;
+        overflow: hidden;
+    }
+
+    .gauge-bar-up { background-color: #ff4b4b; transition: width 0.5s ease; }
+    .gauge-bar-steady { background-color: #d1d1d1; transition: width 0.5s ease; }
+    .gauge-bar-down { background-color: #007aff; transition: width 0.5s ease; }
+
+    /* 데이터프레임 테두리 제거 및 그림자 */
+    div[data-testid="stDataFrame"] {
+        border: none !important;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+
+    /* 셀렉트박스 등 입력 요소 커스텀 */
+    div[data-baseweb="select"], div[data-baseweb="input"] {
+        border-radius: 8px !important;
+    }
+</style>
 """, unsafe_allow_html=True)
 
-# 3. 키 매핑 데이터
+# 3. 키 매핑 및 데이터 로직 (원래 기능 유지)
 KEY_MAP = {
     "itemname": "종목명", "itemcode": "종목코드", "sosok": "소속구분", 
     "risefall": "등락구분", "type": "종목타입", "upperLimit": "상한가", 
@@ -84,7 +157,6 @@ KEY_MAP = {
     "issuerNameKo": "발행사명", "inav": "실시간추정순자산가치(iNAV)"
 }
 
-# 4. 데이터 로드 및 전처리 함수
 @st.cache_data(ttl=60)
 def load_stock_data(market_type="ALL", page_size=10):
     url = (
@@ -136,7 +208,7 @@ def load_stock_data(market_type="ALL", page_size=10):
         for col in numeric_cols:
             if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        if '시가총액' in df.columns: df['시가총액'] = df['시가총액'] / 100000000
+        if '시가총액' in df.columns: df['시가총액'] = df['시가총액'] / 10000
         if '거래대금' in df.columns: df['거래대금'] = df['거래대금'] / 100000000
         if '상장주식수' in df.columns: df['상장주식수'] = df['상장주식수'] / 10000
 
@@ -162,17 +234,22 @@ def load_stock_data(market_type="ALL", page_size=10):
         st.error(f"데이터 처리 중 오류 발생: {e}")
         return pd.DataFrame()
 
-# 5. 스타일링 함수
 def style_dataframe(row):
     status = row.get('등락구분', '')
-    bg_color = '#FFF0F0' if status == '상승' else '#F0F8FF' if status == '하락' else '#FFFFFF'
-    font_color = 'red' if status == '상승' else 'blue' if status == '하락' else 'black'
+    bg_color = '#fff5f5' if status == '상승' else '#f0f7ff' if status == '하락' else '#ffffff'
+    font_color = '#e03131' if status == '상승' else '#1971c2' if status == '하락' else '#1a1a1a'
     
-    return [f"background-color: {bg_color}; color: {'black' if col not in ['현재가(원)', '등락률'] else font_color}; font-weight: {'bold' if col in ['현재가(원)', '등락률'] else 'normal'};" for col in row.index]
+    return [f"background-color: {bg_color}; color: {'#1a1a1a' if col not in ['현재가(원)', '등락률'] else font_color}; font-weight: {'600' if col in ['현재가(원)', '등락률'] else 'normal'};" for col in row.index]
 
-# 6. 메인 함수
+# 4. 메인 함수
 def main():
-    st.title("KOREA STOCK MARKET SUM")
+    # Hero Section
+    st.markdown("""
+    <div class="hero-container">
+        <div class="hero-title">Market Pulse</div>
+        <div class="hero-subtitle">Comprehensive tracking of KOSPI and KOSDAQ exchange data</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     cookie_manager = stx.CookieManager()
     saved_market = cookie_manager.get("market_pref")
@@ -191,17 +268,18 @@ def main():
     market_options = {"전체": "ALL", "코스피": "KOSPI", "코스닥": "KOSDAQ"}
     size_options = [50, 100, 200]
     
+    # Filter Controls
     col1, col2, col3 = st.columns([1, 1, 2])
     with col1: selected_label = st.selectbox("시장 선택", options=list(market_options.keys()), key="market_sb", on_change=save_settings)
-    with col2: selected_size = st.selectbox("조회 개수 (Top N)", options=size_options, key="size_sb", on_change=save_settings)
-    with col3: search_term = st.text_input("종목명 검색", placeholder="종목명을 입력하세요 (예: 삼성)")
+    with col2: selected_size = st.selectbox("조회 개수", options=size_options, key="size_sb", on_change=save_settings)
+    with col3: search_term = st.text_input("종목명 검색", placeholder="Search by company name...")
 
-    # 데이터 로드 (Gauge용 200개 + 테이블용)
+    # 데이터 로드
     selected_code = market_options[selected_label]
     df_total_200 = load_stock_data(selected_code, 200)
     
     if not df_total_200.empty:
-        # Gauge HTML 생성 함수 (들여쓰기 오작동 방지를 위해 왼쪽 정렬)
+        # Gauge HTML 생성 함수
         def get_market_gauge_html(df_subset, title):
             counts = df_subset['등락구분'].value_counts()
             up_cnt, down_cnt, steady_cnt = int(counts.get('상승', 0)), int(counts.get('하락', 0)), int(counts.get('보합', 0))
@@ -209,43 +287,35 @@ def main():
             
             if total > 0:
                 up_per, down_per, steady_per = (up_cnt/total)*100, (down_cnt/total)*100, (steady_cnt/total)*100
-                # 문자열 앞의 공백이 마크다운 '코드블록'으로 인식되지 않도록 처리
                 return (
-f'<div style="margin-bottom: 15px;">'
-    f'<div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.8rem; font-weight: 600;">'
-        f'<span style="color: #444;">{title}</span>'
-        f'<span>'
-            f'<span style="color: #FF4B4B;">▲ {up_cnt} ({up_per:.1f}%)</span> | '
-            f'<span style="color: #666;">▬ {steady_cnt} ({steady_per:.1f}%)</span> | '
-            f'<span style="color: #1C83E1;">▼ {down_cnt} ({down_per:.1f}%)</span>'
-        f'</span>'
-    f'</div>'
-    f'<div style="display: flex; width: 100%; height: 8px; background-color: #EEE; border-radius: 4px; overflow: hidden;">'
-        f'<div style="width: {up_per}%; background-color: #FF4B4B;"></div>'
-        f'<div style="width: {steady_per}%; background-color: #DDD;"></div>'
-        f'<div style="width: {down_per}%; background-color: #1C83E1;"></div>'
-    f'</div>'
-f'</div>'
+                    f'<div class="gauge-item">'
+                    f'    <div class="gauge-header">'
+                    f'        <span>{title}</span>'
+                    f'        <span>'
+                    f'            <span style="color: #ff4b4b;">▲ {up_cnt}</span> | '
+                    f'            <span style="color: #888;">▬ {steady_cnt}</span> | '
+                    f'            <span style="color: #007aff;">▼ {down_cnt}</span>'
+                    f'        </span>'
+                    f'    </div>'
+                    f'    <div class="gauge-bar-container">'
+                    f'        <div class="gauge-bar-up" style="width: {up_per}%;"></div>'
+                    f'        <div class="gauge-bar-steady" style="width: {steady_per}%;"></div>'
+                    f'        <div class="gauge-bar-down" style="width: {down_per}%;"></div>'
+                    f'    </div>'
+                    f'</div>'
                 )
             return ""
 
-        # --- 3개의 Gauge 표시 구역 ---
-        gauge_combined_html = ""
-        gauge_combined_html += get_market_gauge_html(df_total_200.head(50), "Top 50")
-        gauge_combined_html += get_market_gauge_html(df_total_200.head(100), "Top 100")
-        gauge_combined_html += get_market_gauge_html(df_total_200.head(200), "Top 200")
+        # Gauges Container
+        gauge_html = get_market_gauge_html(df_total_200.head(50), "Market Sentiment (Top 50)")
+        gauge_html += get_market_gauge_html(df_total_200.head(100), "Market Sentiment (Top 100)")
+        gauge_html += get_market_gauge_html(df_total_200.head(200), "Market Sentiment (Top 200)")
 
-        # HTML 컨테이너 출력 (문자열 시작점에 공백이 없어야 함)
-        st.markdown(
-            f'<div style="margin-bottom: 25px; padding: 15px; border: 1px solid #F0F0F0; border-radius: 10px; background-color: #FAFAFA;">'
-            f'{gauge_combined_html}'
-            f'</div>', 
-            unsafe_allow_html=True
-        )
+        st.markdown(f'<div class="gauge-wrapper">{gauge_html}</div>', unsafe_allow_html=True)
 
-        # 테이블용 데이터 필터링
+        # 테이블 필터링
         df_kr = df_total_200.head(selected_size).copy()
-        if search_term: df_kr = df_kr[df_kr['종목명'].str.contains(search_term)]
+        if search_term: df_kr = df_kr[df_kr['종목명'].str.contains(search_term, case=False)]
 
         format_dict = {"시가총액(억원)": "{:,.0f}", "등락률": "{:+.2f}%", "PER": "{:,.1f}", "PBR": "{:,.1f}", 
                        "배당수익률": "{:,.1f}", "ROE": "{:,.1f}", "ROA": "{:,.1f}", "상한가": "{:,.0f}", 
@@ -262,9 +332,9 @@ f'</div>'
         final_height = max(100, min((len(df_kr) * 35) + 43, 750))
         st.dataframe(styled_df, width='stretch', hide_index=True, height=final_height, column_config={"등락구분": None})
         
-        st.markdown(f'<div style="text-align: right; color: #888; font-size: 0.8em; margin-top: 10px;">Items displayed: {len(df_kr)} | Source: Naver Finance</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="text-align: right; color: #888; font-size: 0.8rem; margin-top: 15px;">Last updated: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} | Source: Naver Finance</div>', unsafe_allow_html=True)
     else:
-        st.write("데이터를 불러올 수 없습니다.")
+        st.write("Unable to load data. Please check your connection.")
 
 if __name__ == "__main__":
     main()
