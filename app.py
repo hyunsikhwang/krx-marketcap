@@ -208,7 +208,7 @@ def load_stock_data(market_type="ALL", page_size=10):
         for col in numeric_cols:
             if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        if '시가총액' in df.columns: df['시가총액'] = df['시가총액'] / 10000
+        if '시가총액' in df.columns: df['시가총액'] = df['시가총액'] / 100000000
         if '거래대금' in df.columns: df['거래대금'] = df['거래대금'] / 100000000
         if '상장주식수' in df.columns: df['상장주식수'] = df['상장주식수'] / 10000
 
