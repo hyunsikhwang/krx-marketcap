@@ -157,6 +157,109 @@ KEY_MAP = {
     "issuerNameKo": "발행사명", "inav": "실시간추정순자산가치(iNAV)"
 }
 
+RISEFALL_CODE_MAP = {
+    "1": "상승",
+    "2": "상승",
+    "3": "보합",
+    "4": "하락",
+    "5": "하락",
+    "RISE": "상승",
+    "UP": "상승",
+    "UPPER": "상승",
+    "FALL": "하락",
+    "DOWN": "하락",
+    "LOWER": "하락",
+    "STEADY": "보합",
+    "EVEN": "보합",
+    "FLAT": "보합",
+    "상승": "상승",
+    "하락": "하락",
+    "보합": "보합",
+    "상한": "상승",
+    "하한": "하락",
+}
+
+
+def parse_signed_number(value):
+    if value is None or pd.isna(value):
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    text = (
+        text.replace(",", "")
+        .replace("%", "")
+        .replace("＋", "+")
+        .replace("－", "-")
+        .replace("−", "-")
+        .replace("▲", "")
+        .replace("▼", "-")
+    )
+
+    if text in {"", "-", "+", "."}:
+        return None
+
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def normalize_risefall_value(value):
+    if value is None or pd.isna(value):
+        return None
+
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+
+    direct_match = RISEFALL_CODE_MAP.get(normalized)
+    if direct_match:
+        return direct_match
+
+    upper_normalized = normalized.upper()
+    direct_match = RISEFALL_CODE_MAP.get(upper_normalized)
+    if direct_match:
+        return direct_match
+
+    if "상" in normalized and "하" not in normalized:
+        return "상승"
+    if "하" in normalized:
+        return "하락"
+    if "보합" in normalized or "없음" in normalized:
+        return "보합"
+
+    return None
+
+
+def infer_risefall(row):
+    code_fields = [
+        "risefall",
+        "fluctuationType",
+        "upDown",
+        "compareToPreviousPriceCode",
+        "sign",
+        "deviationSign",
+    ]
+    for field in code_fields:
+        direction = normalize_risefall_value(row.get(field))
+        if direction:
+            return direction
+
+    for field in ["changeVal", "changeRate"]:
+        numeric_value = parse_signed_number(row.get(field))
+        if numeric_value is None:
+            continue
+        if numeric_value > 0:
+            return "상승"
+        if numeric_value < 0:
+            return "하락"
+        return "보합"
+
+    return "보합"
+
 @st.cache_data(ttl=60)
 def load_stock_data(market_type="ALL", page_size=10):
     url = (
@@ -183,25 +286,17 @@ def load_stock_data(market_type="ALL", page_size=10):
         df = pd.DataFrame(json_data)
         if df.empty: return df
 
-        if 'risefall' not in df.columns:
-            for fallback_col in ['fluctuationType', 'upDown', 'compareToPreviousPriceCode', 'sign']:
-                if fallback_col in df.columns:
-                    df['risefall'] = df[fallback_col]
-                    break
-
-        if 'risefall' not in df.columns:
-            if 'changeRate' in df.columns:
-                change_rate = pd.to_numeric(df['changeRate'], errors='coerce').fillna(0)
-                df['risefall'] = change_rate.apply(lambda value: '2' if value > 0 else '5' if value < 0 else '3')
-            else:
-                df['risefall'] = '3'
+        df['등락구분_원본'] = df.apply(infer_risefall, axis=1)
 
         df['순위'] = df.index + 1
         df = df.rename(columns=KEY_MAP)
         if '소속구분' in df.columns:
             df['소속구분'] = df['소속구분'].astype(str).replace({'0': 'KOSPI', '1': 'KOSDAQ'})
-        if '등락구분' in df.columns:
-            df['등락구분'] = df['등락구분'].astype(str).replace({'2': '상승', '5': '하락', '3': '보합'})
+        if '등락구분_원본' in df.columns:
+            df['등락구분'] = df['등락구분_원본']
+            df = df.drop(columns=['등락구분_원본'])
+        elif '등락구분' in df.columns:
+            df['등락구분'] = df['등락구분'].apply(normalize_risefall_value).fillna('보합')
         else:
             df['등락구분'] = '보합'
 
