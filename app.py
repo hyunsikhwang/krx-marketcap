@@ -183,10 +183,27 @@ def load_stock_data(market_type="ALL", page_size=10):
         df = pd.DataFrame(json_data)
         if df.empty: return df
 
+        if 'risefall' not in df.columns:
+            for fallback_col in ['fluctuationType', 'upDown', 'compareToPreviousPriceCode', 'sign']:
+                if fallback_col in df.columns:
+                    df['risefall'] = df[fallback_col]
+                    break
+
+        if 'risefall' not in df.columns:
+            if 'changeRate' in df.columns:
+                change_rate = pd.to_numeric(df['changeRate'], errors='coerce').fillna(0)
+                df['risefall'] = change_rate.apply(lambda value: '2' if value > 0 else '5' if value < 0 else '3')
+            else:
+                df['risefall'] = '3'
+
         df['순위'] = df.index + 1
         df = df.rename(columns=KEY_MAP)
-        df['소속구분'] = df['소속구분'].astype(str).replace({'0': 'KOSPI', '1': 'KOSDAQ'})
-        df['등락구분'] = df['등락구분'].astype(str).replace({'2': '상승', '5': '하락', '3': '보합'})
+        if '소속구분' in df.columns:
+            df['소속구분'] = df['소속구분'].astype(str).replace({'0': 'KOSPI', '1': 'KOSDAQ'})
+        if '등락구분' in df.columns:
+            df['등락구분'] = df['등락구분'].astype(str).replace({'2': '상승', '5': '하락', '3': '보합'})
+        else:
+            df['등락구분'] = '보합'
 
         exclude_columns = [
             "매출액증가율", "영업이익", "영업이익증가율", "당기순이익", "상장일",
@@ -281,7 +298,7 @@ def main():
     if not df_total_200.empty:
         # Gauge HTML 생성 함수
         def get_market_gauge_html(df_subset, title):
-            counts = df_subset['등락구분'].value_counts()
+            counts = df_subset.get('등락구분', pd.Series(dtype='object')).value_counts()
             up_cnt, down_cnt, steady_cnt = int(counts.get('상승', 0)), int(counts.get('하락', 0)), int(counts.get('보합', 0))
             total = up_cnt + down_cnt + steady_cnt
             
