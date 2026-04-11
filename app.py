@@ -128,18 +128,24 @@ st.markdown("""
 # 3. 키 매핑 및 데이터 로직 (원래 기능 유지)
 KEY_MAP = {
     "itemname": "종목명", "itemcode": "종목코드", "sosok": "소속구분", 
-    "upDownGb": "등락구분", "type": "종목타입", "upperLimit": "상한가", 
+    "upDownGb": "등락구분",
+    "risefall": "등락구분", "type": "종목타입", "upperLimit": "상한가", 
+    "upperLimitPrice": "상한가",
+    "lowerLimitPrice": "하한가",
     "lowerLimit": "하한가", "statusTag": "상태태그", "tradeStopYn": "거래정지여부", 
+    "manageStatusGb": "상태태그",
     "managementDate": "관리종목지정일", "managementReasonCode": "관리종목지정사유", 
     "tradingHaltDate": "거래정지일", "tradingHaltReasonCode": "거래정지사유", 
-    "marketAlertType": "시장경보구분", "accQuant": "거래량", "marketStatus": "장운영상태", 
+    "marketAlertType": "시장경보구분", "accQuant": "거래량", "tradeVolume": "거래량", "marketStatus": "장운영상태", 
+    "nowPrice": "현재가", "openPrice": "시가", "highPrice": "고가", "lowPrice": "저가",
     "nowVal": "현재가", "openVal": "시가", "highVal": "고가", "lowVal": "저가", 
     "askBuy": "매수호가", "askSell": "매도호가", "buyTotal": "매수잔량", 
-    "sellTotal": "매도잔량", "changeVal": "전일비", "changeRate": "등락률", 
-    "accAmount": "거래대금", "frgnRate": "외국인비율", "frgnHoldCnt": "외국인보유수량", 
+    "totalBuyVolume": "매수잔량", "sellTotal": "매도잔량", "totalSellVolume": "매도잔량",
+    "changeVal": "전일비", "prevChangePrice": "전일비", "changeRate": "등락률", "prevChangeRate": "등락률", 
+    "accAmount": "거래대금", "tradeAmount": "거래대금", "frgnRate": "외국인비율", "frgnHoldRate": "외국인비율", "frgnHoldCnt": "외국인보유수량", 
     "listedStockCnt": "상장주식수", "marketSum": "시가총액", "eps": "주당순이익(EPS)", 
-    "per": "주가수익비율(PER)", "dividendRate": "배당수익률", "high52week": "52주최고가", 
-    "low52week": "52주최저가", "quantDiff": "거래량변동", "quantDiffRate": "거래량변동률", 
+    "per": "주가수익비율(PER)", "dividendRate": "배당수익률", "high52week": "52주최고가", "week52HighPrice": "52주최고가", 
+    "low52week": "52주최저가", "week52LowPrice": "52주최저가", "quantDiff": "거래량변동", "quantDiffRate": "거래량변동률", 
     "prevQuant": "전일거래량", "propertyTotal": "자산총계", "debtTotal": "부채총계", 
     "sales": "매출액", "salesIncreasingRate": "매출액증가율", 
     "operatingProfit": "영업이익", "operatingProfitIncreasingRate": "영업이익증가율", 
@@ -185,6 +191,13 @@ def load_stock_data(market_type="ALL", page_size=10):
 
         df['순위'] = df.index + 1
         df = df.rename(columns=KEY_MAP)
+
+        if df.columns.duplicated().any():
+            coalesced = {}
+            for col in pd.unique(df.columns):
+                same_name_cols = df.loc[:, df.columns == col]
+                coalesced[col] = same_name_cols.bfill(axis=1).iloc[:, 0]
+            df = pd.DataFrame(coalesced)
         if '소속구분' in df.columns:
             df['소속구분'] = df['소속구분'].astype(str).replace({'0': 'KOSPI', '1': 'KOSDAQ'})
         if '등락구분' in df.columns:
