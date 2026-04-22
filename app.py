@@ -4,6 +4,7 @@ import pandas as pd
 import datetime
 import extra_streamlit_components as stx
 import base64
+import html
 import os
 
 # 1. 페이지 설정
@@ -109,6 +110,82 @@ st.markdown("""
     .gauge-bar-up { background-color: #ff4b4b; transition: width 0.5s ease; }
     .gauge-bar-steady { background-color: #d1d1d1; transition: width 0.5s ease; }
     .gauge-bar-down { background-color: #007aff; transition: width 0.5s ease; }
+
+    /* Top Movers Section */
+    .top-movers-wrapper {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-bottom: 18px;
+    }
+
+    .top-movers-panel {
+        border: 1px solid #eaeaea;
+        border-radius: 12px;
+        background-color: #ffffff;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+        overflow: hidden;
+    }
+
+    .top-movers-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 13px 16px;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 0.92rem;
+        font-weight: 700;
+        color: #222222;
+    }
+
+    .top-movers-title span:last-child {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #888888;
+    }
+
+    .top-movers-row {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr) 92px;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        border-bottom: 1px solid #f7f7f7;
+        font-size: 0.88rem;
+    }
+
+    .top-movers-row:last-child {
+        border-bottom: none;
+    }
+
+    .top-movers-rank {
+        color: #888888;
+        font-weight: 700;
+    }
+
+    .top-movers-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #1a1a1a;
+        font-weight: 600;
+    }
+
+    .top-movers-rate {
+        text-align: right;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .top-movers-up .top-movers-rate { color: #e03131; }
+    .top-movers-down .top-movers-rate { color: #1971c2; }
+
+    @media (max-width: 760px) {
+        .top-movers-wrapper {
+            grid-template-columns: 1fr;
+        }
+    }
 
     /* 데이터프레임 테두리 제거 및 그림자 */
     div[data-testid="stDataFrame"] {
@@ -258,6 +335,54 @@ def style_dataframe(row):
     
     return [f"background-color: {bg_color}; color: {'#1a1a1a' if col not in ['현재가(원)', '등락률'] else font_color}; font-weight: {'600' if col in ['현재가(원)', '등락률'] else 'normal'};" for col in row.index]
 
+def get_top_movers_html(df):
+    if '종목명' not in df.columns or '등락률' not in df.columns:
+        return ""
+
+    movers = df[['종목명', '등락률']].copy()
+    movers['등락률'] = pd.to_numeric(movers['등락률'], errors='coerce')
+    movers = movers.dropna(subset=['등락률'])
+    if movers.empty:
+        return ""
+
+    top_gainers = movers[movers['등락률'] > 0].nlargest(5, '등락률')
+    top_losers = movers[movers['등락률'] < 0].nsmallest(5, '등락률')
+
+    def build_panel(title, badge, rows, direction_class):
+        row_html = ""
+        if rows.empty:
+            row_html = (
+                '<div class="top-movers-row">'
+                '<div class="top-movers-rank">-</div>'
+                '<div class="top-movers-name">해당 종목 없음</div>'
+                '<div class="top-movers-rate">-</div>'
+                '</div>'
+            )
+        else:
+            for rank, (_, row) in enumerate(rows.iterrows(), start=1):
+                name = html.escape(str(row['종목명']))
+                rate = row['등락률']
+                row_html += (
+                    f'<div class="top-movers-row {direction_class}">'
+                    f'<div class="top-movers-rank">{rank}</div>'
+                    f'<div class="top-movers-name" title="{name}">{name}</div>'
+                    f'<div class="top-movers-rate">{rate:+.2f}%</div>'
+                    f'</div>'
+                )
+        return (
+            '<div class="top-movers-panel">'
+            f'<div class="top-movers-title"><span>{title}</span><span>{badge}</span></div>'
+            f'{row_html}'
+            '</div>'
+        )
+
+    return (
+        '<div class="top-movers-wrapper">'
+        f'{build_panel("상승률 Top 5", "현재 목록 기준", top_gainers, "top-movers-up")}'
+        f'{build_panel("하락률 Top 5", "현재 목록 기준", top_losers, "top-movers-down")}'
+        '</div>'
+    )
+
 # 4. 메인 함수
 def main():
     # Hero Section
@@ -333,6 +458,10 @@ def main():
         # 테이블 필터링
         df_kr = df_total_200.head(selected_size).copy()
         if search_term: df_kr = df_kr[df_kr['종목명'].str.contains(search_term, case=False)]
+
+        top_movers_html = get_top_movers_html(df_kr)
+        if top_movers_html:
+            st.markdown(top_movers_html, unsafe_allow_html=True)
 
         format_dict = {"시가총액(억원)": "{:,.0f}", "등락률": "{:+.2f}%", "PER": "{:,.1f}", "PBR": "{:,.1f}", 
                        "배당수익률": "{:,.1f}", "ROE": "{:,.1f}", "ROA": "{:,.1f}", "상한가": "{:,.0f}", 
