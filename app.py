@@ -73,12 +73,12 @@ st.markdown("""
 
     /* Gauge Section Design */
     .gauge-wrapper {
-        margin-bottom: 25px;
         padding: 20px;
         border: 1px solid #eaeaea;
-        border-radius: 16px;
+        border-radius: 12px;
         background-color: #ffffff;
         box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+        overflow: hidden;
     }
 
     .gauge-item {
@@ -111,12 +111,13 @@ st.markdown("""
     .gauge-bar-steady { background-color: #d1d1d1; transition: width 0.5s ease; }
     .gauge-bar-down { background-color: #007aff; transition: width 0.5s ease; }
 
-    /* Top Movers Section */
-    .top-movers-wrapper {
+    /* Market Summary Section */
+    .market-summary-wrapper {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: minmax(0, 1fr) minmax(280px, 1.2fr) minmax(0, 1fr);
         gap: 16px;
         margin-bottom: 18px;
+        align-items: stretch;
     }
 
     .top-movers-panel {
@@ -181,8 +182,8 @@ st.markdown("""
     .top-movers-up .top-movers-rate { color: #e03131; }
     .top-movers-down .top-movers-rate { color: #1971c2; }
 
-    @media (max-width: 760px) {
-        .top-movers-wrapper {
+    @media (max-width: 980px) {
+        .market-summary-wrapper {
             grid-template-columns: 1fr;
         }
     }
@@ -335,15 +336,15 @@ def style_dataframe(row):
     
     return [f"background-color: {bg_color}; color: {'#1a1a1a' if col not in ['현재가(원)', '등락률'] else font_color}; font-weight: {'600' if col in ['현재가(원)', '등락률'] else 'normal'};" for col in row.index]
 
-def get_top_movers_html(df):
+def get_top_movers_panels(df):
     if '종목명' not in df.columns or '등락률' not in df.columns:
-        return ""
+        return "", ""
 
     movers = df[['종목명', '등락률']].copy()
     movers['등락률'] = pd.to_numeric(movers['등락률'], errors='coerce')
     movers = movers.dropna(subset=['등락률'])
     if movers.empty:
-        return ""
+        return "", ""
 
     top_gainers = movers[movers['등락률'] > 0].nlargest(5, '등락률')
     top_losers = movers[movers['등락률'] < 0].nsmallest(5, '등락률')
@@ -377,10 +378,8 @@ def get_top_movers_html(df):
         )
 
     return (
-        '<div class="top-movers-wrapper">'
-        f'{build_panel("상승률 Top 5", "현재 목록 기준", top_gainers, "top-movers-up")}'
-        f'{build_panel("하락률 Top 5", "현재 목록 기준", top_losers, "top-movers-down")}'
-        '</div>'
+        build_panel("상승률 Top 5", "현재 목록 기준", top_gainers, "top-movers-up"),
+        build_panel("하락률 Top 5", "현재 목록 기준", top_losers, "top-movers-down"),
     )
 
 # 4. 메인 함수
@@ -453,15 +452,20 @@ def main():
         gauge_html += get_market_gauge_html(df_total_200.head(100), "Market Sentiment (Top 100)")
         gauge_html += get_market_gauge_html(df_total_200.head(200), "Market Sentiment (Top 200)")
 
-        st.markdown(f'<div class="gauge-wrapper">{gauge_html}</div>', unsafe_allow_html=True)
-
         # 테이블 필터링
         df_kr = df_total_200.head(selected_size).copy()
         if search_term: df_kr = df_kr[df_kr['종목명'].str.contains(search_term, case=False)]
 
-        top_movers_html = get_top_movers_html(df_kr)
-        if top_movers_html:
-            st.markdown(top_movers_html, unsafe_allow_html=True)
+        gainers_html, losers_html = get_top_movers_panels(df_kr)
+        if gainers_html and losers_html:
+            st.markdown(
+                '<div class="market-summary-wrapper">'
+                f'{gainers_html}'
+                f'<div class="gauge-wrapper">{gauge_html}</div>'
+                f'{losers_html}'
+                '</div>',
+                unsafe_allow_html=True,
+            )
 
         format_dict = {"시가총액(억원)": "{:,.0f}", "등락률": "{:+.2f}%", "PER": "{:,.1f}", "PBR": "{:,.1f}", 
                        "배당수익률": "{:,.1f}", "ROE": "{:,.1f}", "ROA": "{:,.1f}", "상한가": "{:,.0f}", 
