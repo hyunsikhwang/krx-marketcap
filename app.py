@@ -74,8 +74,8 @@ st.markdown("""
     /* Gauge Section Design */
     .gauge-wrapper {
         box-sizing: border-box;
-        min-height: 300px;
-        padding: 20px;
+        min-height: 210px;
+        padding: 14px 16px;
         border: 1px solid #eaeaea;
         border-radius: 12px;
         background-color: #ffffff;
@@ -84,7 +84,7 @@ st.markdown("""
     }
 
     .gauge-item {
-        margin-bottom: 18px;
+        margin-bottom: 12px;
     }
     
     .gauge-item:last-child {
@@ -127,7 +127,7 @@ st.markdown("""
         display: flex;
         flex-direction: column;
         height: 100%;
-        min-height: 300px;
+        min-height: 210px;
         border: 1px solid #eaeaea;
         border-radius: 12px;
         background-color: #ffffff;
@@ -140,8 +140,8 @@ st.markdown("""
         display: flex;
         align-items: center;
         justify-content: space-between;
-        min-height: 56px;
-        padding: 16px 16px;
+        min-height: 42px;
+        padding: 11px 16px;
         border-bottom: 1px solid #f0f0f0;
         font-size: 0.92rem;
         font-weight: 700;
@@ -160,8 +160,8 @@ st.markdown("""
         grid-template-columns: 34px minmax(0, 1fr) 92px;
         align-items: center;
         gap: 10px;
-        min-height: 48px;
-        padding: 14px 16px !important;
+        min-height: 33px;
+        padding: 8px 16px !important;
         border-bottom: 1px solid #f7f7f7;
         font-size: 0.88rem;
         flex: 1;
