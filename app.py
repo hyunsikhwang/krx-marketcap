@@ -121,6 +121,9 @@ st.markdown("""
     }
 
     .top-movers-panel {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
         border: 1px solid #eaeaea;
         border-radius: 12px;
         background-color: #ffffff;
@@ -132,7 +135,7 @@ st.markdown("""
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 13px 16px;
+        padding: 15px 16px;
         border-bottom: 1px solid #f0f0f0;
         font-size: 0.92rem;
         font-weight: 700;
@@ -150,9 +153,10 @@ st.markdown("""
         grid-template-columns: 34px minmax(0, 1fr) 92px;
         align-items: center;
         gap: 10px;
-        padding: 10px 16px;
+        padding: 12px 16px;
         border-bottom: 1px solid #f7f7f7;
         font-size: 0.88rem;
+        flex: 1;
     }
 
     .top-movers-row:last-child {
