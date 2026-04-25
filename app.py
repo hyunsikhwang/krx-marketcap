@@ -6,6 +6,11 @@ import extra_streamlit_components as stx
 import base64
 import html
 import os
+from zoneinfo import ZoneInfo
+
+SEOUL_TZ = ZoneInfo("Asia/Seoul")
+MARKET_OPEN_TIME = datetime.time(9, 0)
+MARKET_CLOSE_TIME = datetime.time(15, 0)
 
 # 1. 페이지 설정
 st.set_page_config(
@@ -69,6 +74,63 @@ st.markdown("""
         padding: 1.5rem;
         margin-bottom: 2rem;
         border: 1px solid #eaeaea;
+    }
+
+    .market-basis-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 18px;
+        margin: 12px 0 18px;
+        border-radius: 12px;
+        border: 1px solid #eaeaea;
+        background: linear-gradient(135deg, #fafafa 0%, #f3f6fb 100%);
+    }
+
+    .market-basis-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+    }
+
+    .market-basis-label {
+        font-size: 0.76rem;
+        font-weight: 700;
+        color: #666666;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .market-basis-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #111111;
+    }
+
+    .market-basis-detail {
+        font-size: 0.88rem;
+        color: #666666;
+    }
+
+    .market-basis-badge {
+        flex-shrink: 0;
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 0.9rem;
+        font-weight: 700;
+        line-height: 1;
+    }
+
+    .market-basis-badge-krx {
+        color: #0f5132;
+        background: #d1f4df;
+    }
+
+    .market-basis-badge-nxt {
+        color: #0b5394;
+        background: #dceeff;
     }
 
     /* Gauge Section Design */
@@ -253,11 +315,33 @@ KEY_MAP = {
     "issuerNameKo": "발행사명", "inav": "실시간추정순자산가치(iNAV)"
 }
 
+def get_current_trade_type_info(now=None):
+    current_time = now or datetime.datetime.now(SEOUL_TZ)
+    seoul_time = current_time.astimezone(SEOUL_TZ)
+    clock = seoul_time.time().replace(second=0, microsecond=0)
+
+    is_regular_session = MARKET_OPEN_TIME <= clock <= MARKET_CLOSE_TIME
+    trade_type = "KRX" if is_regular_session else "NXT"
+    market_label = "KRX 정규장" if is_regular_session else "NXT 장외"
+    reason = (
+        "서울시간 09:00~15:00 정규장 시간이라 KRX 가격을 표시합니다."
+        if is_regular_session
+        else "서울시간 09:00 이전 또는 15:00 이후라 NXT 가격을 표시합니다."
+    )
+
+    return {
+        "trade_type": trade_type,
+        "market_label": market_label,
+        "reason": reason,
+        "timestamp": seoul_time,
+    }
+
+
 @st.cache_data(ttl=60)
-def load_stock_data(market_type="ALL", page_size=10):
+def load_stock_data(market_type="ALL", page_size=10, trade_type="KRX"):
     url = (
         "https://stock.naver.com/api/domestic/market/stock/default"
-        f"?tradeType=KRX&marketType={market_type}&orderType=marketSum"
+        f"?tradeType={trade_type}&marketType={market_type}&orderType=marketSum"
         f"&startIdx=0&pageSize={page_size}"
     )
     
@@ -396,6 +480,8 @@ def get_top_movers_panels(df):
 
 # 4. 메인 함수
 def main():
+    market_basis = get_current_trade_type_info()
+
     # Hero Section
     st.markdown("""
     <div class="hero-container">
@@ -429,7 +515,21 @@ def main():
 
     # 데이터 로드
     selected_code = market_options[selected_label]
-    df_total_200 = load_stock_data(selected_code, 200)
+    st.markdown(
+        f"""
+        <div class="market-basis-banner">
+            <div class="market-basis-copy">
+                <div class="market-basis-label">Current Price Basis</div>
+                <div class="market-basis-title">현재 화면은 {market_basis["market_label"]} 기준입니다.</div>
+                <div class="market-basis-detail">{market_basis["reason"]} 현재 시각: {market_basis["timestamp"].strftime("%Y-%m-%d %H:%M")} (Asia/Seoul)</div>
+            </div>
+            <div class="market-basis-badge market-basis-badge-{market_basis["trade_type"].lower()}">{market_basis["trade_type"]}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    df_total_200 = load_stock_data(selected_code, 200, market_basis["trade_type"])
     
     if not df_total_200.empty:
         # Gauge HTML 생성 함수
@@ -494,7 +594,13 @@ def main():
         final_height = max(100, min((len(df_kr) * 35) + 43, 750))
         st.dataframe(styled_df, width='stretch', hide_index=True, height=final_height, column_config={"등락구분": None})
         
-        st.markdown(f'<div style="text-align: right; color: #888; font-size: 0.8rem; margin-top: 15px;">Last updated: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} | Source: Naver Finance</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="text-align: right; color: #888; font-size: 0.8rem; margin-top: 15px;">'
+            f'Last updated: {market_basis["timestamp"].strftime("%Y-%m-%d %H:%M:%S")} (Asia/Seoul) | '
+            f'Source: Naver Finance | Price basis: {market_basis["trade_type"]}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
     else:
         st.write("Unable to load data. Please check your connection.")
 
